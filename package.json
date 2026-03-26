@@ -1,0 +1,21 @@
+{
+  "name": "chatnova",
+  "version": "1.0.0",
+  "description": "ChatNova is a scalable real-time chat application built with the MERN stack and Socket.io, featuring secure authentication, instant messaging, and modern UI.",
+  "main": "index.js",
+  "scripts": {
+    "build": "npm install --prefix frontend && npm run build --prefix frontend && npm install --prefix backend",
+    "start": "npm run start --prefix backend"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Krish9927/ChatNova.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Krish9927/ChatNova/issues"
+  },
+  "homepage": "https://github.com/Krish9927/ChatNova#readme"
+}
