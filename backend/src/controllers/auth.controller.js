@@ -1,7 +1,8 @@
 import User from '../models/User.model.js';
 import bcrypt from 'bcryptjs';  
 import { generateToken } from '../lib/utils.js';
-
+import { sendWelcomeEmail } from '../emails/emailHandler.js';
+import { ENV } from '../lib/env.js';  
 export const signup = async (req, res) => {
     const {fullName, email, password} = req.body;
     try {
@@ -26,20 +27,21 @@ export const signup = async (req, res) => {
             email: email,
             password: hashedPassword
         });
-        if (newUser) {
-    // generateToken(newUser._id, res);
-    // await newUser.save();
-
-    // Persist user first, then issue auth cookie
-          const savedUser = await newUser.save();
-          generateToken(newUser._id, res);
-}
-         return res.status(201).json({
-            _id: newUser._id,
-            fullName: newUser.username,
-            email: newUser.email
+        // Persist user first, then issue auth cookie
+        const savedUser = await newUser.save();
+        generateToken(savedUser._id, res);
+          res.status(201).json({
+            _id: savedUser._id,
+            fullName: savedUser.username,
+            email: savedUser.email,
+            profilePic: savedUser.profilePic,
         });
 
+      try {                 
+        await sendWelcomeEmail(savedUser.email, savedUser.username, ENV.CLIENT_URL);        
+      }catch (emailError) {
+        console.error('Error sending welcome email:', emailError);
+      }
     } catch (error) {
         console.error('Error in signup:', error);
         res.status(500).json({ message: 'Internal server error' });

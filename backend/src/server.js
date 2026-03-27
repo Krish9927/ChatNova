@@ -5,20 +5,19 @@ import messageRoutes from './routes/message.route.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import {connectDB} from './lib/db.js';
-
-dotenv.config();  
+import { ENV } from './lib/env.js'; 
 
 
 const app=express();
 app.use(express.json());
 const __dirname=path.resolve();
-console.log(process.env.PORT); 
-const PORT=process.env.PORT || 3001;
+console.log(ENV.PORT); 
+const PORT=ENV.PORT || 3001;
 app.use(express.json());
 
 app.use("/api/auth",authRoutes);
 app.use("/api/message",messageRoutes);  
-if(process.env.NODE_ENV==="production"){
+if(ENV.NODE_ENV==="production"){
     app.use(express.static(path.join(__dirname,"../frontend/dist")));
     app.get("*",(_,res)=>{
         res.sendFile(path.join(__dirname,"../frontend/build/index.html"));
