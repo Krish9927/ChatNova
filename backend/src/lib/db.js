@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import {ENV} from "./env.js";   
 
 export const connectDB = async () => {                 
     try {
@@ -6,7 +7,7 @@ export const connectDB = async () => {
         if (!MONGO_URI) {
             throw new Error('MONGO_URI is not defined in environment variables');
         }
-        const uri = process.env.MONGO_URI;
+        const uri = ENV.MONGO_URI;
         // Extract db name from mongodb URI like: mongodb+srv://user:pass@host/<db>?...
         const dbName = uri?.match(/\/([^\/\?]+)(?:\?|$)/)?.[1];
         console.log('[db] Connecting to MongoDB database:', dbName);
