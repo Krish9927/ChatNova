@@ -29,3 +29,18 @@ app.listen(PORT,()=>{
     console.log(`Server is running on port ${PORT}`);
     connectDB();
 })
+
+// Error handler for JSON parse errors and other errors — respond with JSON
+app.use((err, req, res, next) => {
+    if (err && err.type === 'entity.parse.failed') {
+        return res.status(400).json({ message: 'Invalid JSON payload' });
+    }
+    if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+        return res.status(400).json({ message: 'Malformed JSON' });
+    }
+    if (err) {
+        console.error('Unhandled error:', err);
+        return res.status(err.status || 500).json({ message: err.message || 'Internal server error' });
+    }
+    next();
+});
