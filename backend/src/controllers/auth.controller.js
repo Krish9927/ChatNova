@@ -1,6 +1,6 @@
 import User from '../models/user.model.js';
 import bcrypt from 'bcryptjs';  
-
+import { generateToken } from '../lib/utils.js';
 
 export const signup = async (req, res) => {
     const {fullName, email, password} = req.body;
@@ -26,8 +26,15 @@ export const signup = async (req, res) => {
             email: email,
             password: hashedPassword
         });
-        await newUser.save();
-        return res.status(201).json({
+        if (newUser) {
+    // generateToken(newUser._id, res);
+    // await newUser.save();
+
+    // Persist user first, then issue auth cookie
+          const savedUser = await newUser.save();
+          generateToken(newUser._id, res);
+}
+         return res.status(201).json({
             _id: newUser._id,
             fullName: newUser.username,
             email: newUser.email
