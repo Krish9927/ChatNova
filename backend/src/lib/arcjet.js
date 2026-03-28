@@ -1,6 +1,9 @@
 import arcjet, { shield, detectBot, slidingWindow } from "@arcjet/node"; 
 import { ENV } from "./env.js";
- 
+
+// Use DRY_RUN for bot detection outside production so Postman and dev tools
+// won't be blocked during development. In production keep LIVE to enforce rules.
+const botMode = ENV.ARCJET_ENV === "production" ? "LIVE" : "DRY_RUN";
 
 const aj = arcjet({ 
   key: ENV.ARCJET_KEY,
@@ -9,7 +12,7 @@ const aj = arcjet({
     shield({ mode: "LIVE" }),
     // Create a bot detection rule
     detectBot({
-      mode: "LIVE", // Blocks requests. Use "DRY_RUN" to log only
+      mode: botMode, // Blocks requests only in production
       // Block all bots except the following
       allow: [
         "CATEGORY:SEARCH_ENGINE", // Google, Bing, etc
@@ -21,7 +24,7 @@ const aj = arcjet({
     }),
     // Create a sliding window rate limit. Other algorithms are supported.
     slidingWindow({
-      mode: "LIVE",
+      mode: botMode === "LIVE" ? "LIVE" : "DRY_RUN",
       // Tracked by IP address by default, but this can be customized
       // See https://docs.arcjet.com/fingerprints
       //characteristics: ["ip.src"], 
