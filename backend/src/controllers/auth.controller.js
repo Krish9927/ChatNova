@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { generateToken } from '../lib/utils.js';
 import { sendWelcomeEmail } from '../emails/emailHandler.js';
 import { ENV } from '../lib/env.js';  
+import cloudinary from '../lib/cloudinary.js';
 export const signup = async (req, res) => {
     const {fullName, email, password} = req.body;
     try {
@@ -87,3 +88,34 @@ export const logout=(_,res)=>{
     });
     res.status(200).json({message:"Logged out successfully"});
 }  
+
+export const updateProfile=async(req,res)=>{
+    const { profilePic} = req.body; 
+    try {
+        const userId=req.user._id;
+         const uploadResult = await cloudinary.uploader.upload(profilePic, {
+            folder: 'chatnova/profile_pics',
+            public_id: `profile_${userId}`,
+            overwrite: true,
+            resource_type: 'image',
+        }); 
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            { profilePic: uploadResult.secure_url },
+            { new: true, select: '-password -__v' }
+        );
+        if (!updatedUser) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        res.status(200).json({
+            _id: updatedUser._id,
+            fullName: updatedUser.username,
+            email: updatedUser.email,
+            profilePic: updatedUser.profilePic,
+        });
+    } catch (error) {
+        console.error('Error in updateProfile:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }   
+}
+    

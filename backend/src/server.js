@@ -6,7 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import {connectDB} from './lib/db.js';
 import { ENV } from './lib/env.js'; 
-
+import cookieParser from 'cookie-parser';
 
 const app=express();
 app.use(express.json());
@@ -14,7 +14,7 @@ const __dirname=path.resolve();
 console.log(ENV.PORT); 
 const PORT=ENV.PORT || 3001;
 app.use(express.json());
-
+app.use(cookieParser());
 app.use("/api/auth",authRoutes);
 app.use("/api/message",messageRoutes);  
 if(ENV.NODE_ENV==="production"){
