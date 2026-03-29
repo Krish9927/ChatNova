@@ -10,6 +10,12 @@ router.post('/logout',arcjetProtection  ,logout);
 // support POST logout (some clients send POST) 
 router.put('/update-profile',protectedRoute,updateProfile);
 router.get('/check-auth', protectedRoute, (req, res) => {
-    res.status(200).json({ message: 'User is authenticated' });
+    const u = req.user;
+    res.status(200).json({
+        _id: u._id,
+        fullName: u.username,
+        email: u.email,
+        profilePic: u.profilePic,
+    });
 });
 export default router;
