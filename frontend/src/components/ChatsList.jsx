@@ -24,10 +24,11 @@ function ChatsList() {
           <div className="flex items-center gap-3">
             {/* TODO: FIX THIS ONLINE STATUS AND MAKE IT WORK WITH SOCKET */}
             <div className={`avatar avatar-online`}>
-              <div className="size-12 rounded-full">
+              <div className="w-12 h-12 rounded-full overflow-hidden">
+                <img src={chat.profilePic || "/avatar.png"} alt="" className="w-full h-full object-cover" />
               </div>
             </div>
-              <h4 className="text-slate-200 font-medium truncate">{chat.fullName || chat.username}</h4>
+            <h4 className="text-slate-200 font-medium truncate">{chat.fullName || chat.username}</h4>
           </div>
         </div>
       ))}

@@ -31,7 +31,7 @@ function ProfileHeader() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           {/* AVATAR */}
-          
+
           <div className="relative shrink-0">
             <button
               type="button"
@@ -76,7 +76,7 @@ function ProfileHeader() {
             className="text-slate-400 hover:text-slate-200 transition-colors"
             onClick={logout}
           >
-            <LogOutIcon className="size-5" />
+            <LogOutIcon className="w-5 h-5" />
           </button>
 
           {/* SOUND TOGGLE BTN */}
@@ -90,9 +90,9 @@ function ProfileHeader() {
             }}
           >
             {isSoundEnabled ? (
-              <Volume2Icon className="size-5" />
+              <Volume2Icon className="w-5 h-5" />
             ) : (
-              <VolumeOffIcon className="size-5" />
+              <VolumeOffIcon className="w-5 h-5" />
             )}
           </button>
         </div>

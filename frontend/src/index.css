@@ -11,7 +11,7 @@
 }
 
 .auth-input-icon {
-  @apply absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 size-5;
+  @apply absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5;
 }
 
 .auth-input-label {
