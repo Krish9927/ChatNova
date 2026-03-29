@@ -13,11 +13,15 @@ const app=express();
 
 app.use(cors({ origin: ENV.CLIENT_URL, credentials: true }));
 
-app.use(express.json());
+// Default body limit is ~100kb; profile pics are sent as base64 and need more headroom
+// Increase limit to allow larger base64 images from the client
+const jsonLimit = "50mb";
+app.use(express.json({ limit: jsonLimit }));
+app.use(express.urlencoded({ extended: true, limit: jsonLimit }));
+
 const __dirname=path.resolve();
 console.log(ENV.PORT); 
 const PORT=ENV.PORT || 3001;
-app.use(express.json());
 app.use(cookieParser());
 app.use("/api/auth",authRoutes);
 app.use("/api/messages",messageRoutes);  
@@ -41,6 +45,10 @@ app.use((err, req, res, next) => {
     }
     if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
         return res.status(400).json({ message: 'Malformed JSON' });
+    }
+    // Explicitly handle too-large payloads
+    if (err && (err.status === 413 || err.type === 'entity.too.large')) {
+        return res.status(413).json({ message: 'Request entity too large' });
     }
     if (err) {
         console.error('Unhandled error:', err);
