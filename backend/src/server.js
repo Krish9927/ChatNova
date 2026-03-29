@@ -7,8 +7,12 @@ import { fileURLToPath } from 'url';
 import {connectDB} from './lib/db.js';
 import { ENV } from './lib/env.js'; 
 import cookieParser from 'cookie-parser';
+import cors from 'cors';
 
 const app=express();
+
+app.use(cors({ origin: ENV.CLIENT_URL, credentials: true }));
+
 app.use(express.json());
 const __dirname=path.resolve();
 console.log(ENV.PORT); 
