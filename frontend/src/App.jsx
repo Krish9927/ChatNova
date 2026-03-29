@@ -29,11 +29,11 @@ function App() {
         <div className="absolute bottom-[-100px] right-[-100px] w-[400px] h-[400px] bg-cyan-500 opacity-20 blur-[120px] rounded-full" />
 
         <div
-          className={`relative z-10 w-full px-4 sm:px-6 ${isAuthPage ? "max-w-6xl" : "max-w-full"}`}
+          className={`relative z-10 w-full ${isAuthPage ? "max-w-6xl px-4 sm:px-6" : "max-w-full px-1 sm:px-2"}`}
         >
           <div
-            className={`bg-slate-900/70 backdrop-blur-xl border border-slate-800 rounded-2xl shadow-2xl overflow-hidden ${
-              isAuthPage ? "p-2 sm:p-4" : "p-6"
+            className={`overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70 shadow-2xl backdrop-blur-xl ${
+              isAuthPage ? "p-2 sm:p-4" : "p-0"
             }`}
           >
             <Routes>
