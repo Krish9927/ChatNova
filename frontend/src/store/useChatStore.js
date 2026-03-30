@@ -79,8 +79,7 @@ export const useChatStore = create((set, get) => ({
       isOptimistic: true,
     };
 
-    // optimistic update
-    set((state) => ({ messages: [...state.messages, optimisticMessage] }));
+    // optimistic update    set((state) => ({ messages: [...state.messages, optimisticMessage] }));
 
     try {
       const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
@@ -114,7 +113,6 @@ export const useChatStore = create((set, get) => ({
       }
     });
   },
-
   unsubscribeFromMessages: () => {
     const socket = useAuthStore.getState().socket;
     if (!socket) return;
