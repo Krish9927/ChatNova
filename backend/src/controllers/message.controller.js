@@ -1,22 +1,23 @@
 import Message from "../models/Message.js";
 import User from "../models/User.js";
 import cloudinary from "../lib/cloudinary.js";
+import { io, getReceiverSocketId } from "../lib/socket.js";
 
 
 
 
 
-export const getAllContacts=async(req,res)=>{   
- try{
-    const loggedUserId =req.user._id;
-    const filteredUsers=await User.find({ _id: { $ne: loggedUserId } }).select("-password");
-    res.status(200).json(filteredUsers);    
- }
-    catch(err){ 
-        console.error("Error fetching contacts:", err);
-        res.status(500).json({ message: "Internal server error" });
-    }   
-};   
+export const getAllContacts = async (req, res) => {
+  try {
+    const loggedUserId = req.user._id;
+    const filteredUsers = await User.find({ _id: { $ne: loggedUserId } }).select("-password");
+    res.status(200).json(filteredUsers);
+  }
+  catch (err) {
+    console.error("Error fetching contacts:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
 
 export const getMessagesByUserId = async (req, res) => {
   try {
@@ -77,7 +78,10 @@ export const sendMessage = async (req, res) => {
 
     await newMessage.save();
 
-    // todo: send message in real-time if user is online - socket.io
+    const receiverSocketId = getReceiverSocketId(receiverId);
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("newMessage", newMessage);
+    }
 
     res.status(201).json(newMessage);
   } catch (error) {
