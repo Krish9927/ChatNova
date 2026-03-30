@@ -4,14 +4,14 @@ import authRoutes from './routes/auth.route.js';
 import messageRoutes from './routes/message.route.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import {connectDB} from './lib/db.js';
-import { ENV } from './lib/env.js'; 
+import { connectDB } from './lib/db.js';
+import { ENV } from './lib/env.js';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
-
-const app=express();
+import { io, app, server } from './lib/socket.js';
 
 app.use(cors({ origin: ENV.CLIENT_URL, credentials: true }));
+app.use(cookieParser());
 
 // Default body limit is ~100kb; profile pics are sent as base64 and need more headroom
 // Increase limit to allow larger base64 images from the client
@@ -19,21 +19,20 @@ const jsonLimit = "50mb";
 app.use(express.json({ limit: jsonLimit }));
 app.use(express.urlencoded({ extended: true, limit: jsonLimit }));
 
-const __dirname=path.resolve();
-console.log(ENV.PORT); 
-const PORT=ENV.PORT || 3001;
-app.use(cookieParser());
-app.use("/api/auth",authRoutes);
-app.use("/api/messages",messageRoutes);  
-if(ENV.NODE_ENV==="production"){
-    app.use(express.static(path.join(__dirname,"../frontend/dist")));
-    app.get("*",(_,res)=>{
-        res.sendFile(path.join(__dirname,"../frontend/build/index.html"));
+const __dirname = path.resolve();
+console.log(ENV.PORT);
+const PORT = ENV.PORT || 3001;
+app.use("/api/auth", authRoutes);
+app.use("/api/messages", messageRoutes);
+if (ENV.NODE_ENV === "production") {
+    app.use(express.static(path.join(__dirname, "../frontend/dist")));
+    app.get("*", (_, res) => {
+        res.sendFile(path.join(__dirname, "../frontend/build/index.html"));
     });
 }
 
 
-app.listen(PORT,()=>{
+server.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
     connectDB();
 })
