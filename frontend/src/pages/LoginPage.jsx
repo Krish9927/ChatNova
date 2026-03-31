@@ -2,15 +2,17 @@ import { useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
 import BorderAnimatedContainer from "../components/BorderAnimatedContainer";
 import { MessageCircleIcon, MailIcon, LoaderIcon, LockIcon } from "lucide-react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 function LoginPage() {
   const [formData, setFormData] = useState({ email: "", password: "" });
   const { login, isLoggingIn } = useAuthStore();
+  const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    login(formData);
+    const result = await login(formData);
+    if (result === "verify") navigate("/verify-email");
   };
 
   return (
@@ -72,7 +74,10 @@ function LoginPage() {
                   </button>
                 </form>
 
-                <div className="mt-6 text-center">
+                <div className="mt-6 text-center space-y-2">
+                  <Link to="/forgot-password" className="auth-link block text-sm">
+                    Forgot your password?
+                  </Link>
                   <Link to="/signup" className="auth-link">
                     Don't have an account? Sign Up
                   </Link>
