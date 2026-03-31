@@ -2,15 +2,17 @@ import { useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
 import BorderAnimatedContainer from "../components/BorderAnimatedContainer";
 import { MessageCircleIcon, LockIcon, MailIcon, UserIcon, LoaderIcon } from "lucide-react";
-import { Link } from "react-router"; // Note: Usually 'react-router-dom' instead of 'react-router'
+import { Link, useNavigate } from "react-router";
 
 function SignUpPage() {
   const [formData, setFormData] = useState({ fullName: "", email: "", password: "" });
   const { signup, isSigningUp } = useAuthStore();
+  const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    signup(formData);
+    const result = await signup(formData);
+    if (result === "verify") navigate("/verify-email");
   };
 
   return (
@@ -19,12 +21,12 @@ function SignUpPage() {
         <BorderAnimatedContainer>
           {/* FIX 1: Added h-full and overflow-hidden here */}
           <div className="w-full h-full flex flex-col md:flex-row overflow-hidden">
-            
+
             {/* FORM COLUMN - LEFT SIDE */}
             {/* FIX 2: Changed md:w-1/2 to flex-1 to perfectly split the container space */}
             <div className="flex-1 min-w-0 p-8 flex items-center justify-center md:border-r border-slate-600/30">
               <div className="w-full max-w-md">
-                
+
                 {/* HEADING TEXT */}
                 <div className="text-center mb-8">
                   <MessageCircleIcon className="w-12 h-12 mx-auto text-slate-400 mb-4" />
@@ -118,7 +120,7 @@ function SignUpPage() {
                 </div>
               </div>
             </div>
-            
+
           </div>
         </BorderAnimatedContainer>
       </div>
