@@ -1,3 +1,11 @@
+/*
+ * CHANGED: useChatStore.js
+ * Date: 2025
+ * Changes:
+ *  - Fixed broken optimistic update: set() call was accidentally on same line as comment
+ *  - subscribeToMessages: added null guard for socket
+ *  - subscribeToMessages: reads isSoundEnabled via get() instead of stale closure
+ */
 import { create } from "zustand";
 import { axiosInstance } from "../lib/axios";
 import toast from "react-hot-toast";

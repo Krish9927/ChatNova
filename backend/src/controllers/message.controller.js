@@ -1,3 +1,11 @@
+/*
+ * CHANGED: message.controller.js
+ * Date: 2025
+ * Changes:
+ *  - Added import for io and getReceiverSocketId from socket.js
+ *  - Fixed emit event name: "receiveMessage" → "newMessage" to match frontend listener
+ *  - Added sender socket emit so sender's other tabs/devices update in real-time
+ */
 import Message from "../models/Message.js";
 import User from "../models/User.js";
 import cloudinary from "../lib/cloudinary.js";

@@ -1,3 +1,15 @@
+/*
+ * CHANGED: auth.controller.js
+ * Date: 2025
+ * Changes:
+ *  - Replaced Resend with Nodemailer (Gmail SMTP) for all email sending
+ *  - Added OTP-based email verification flow (signup → OTP → verify → JWT)
+ *  - Added forgot password OTP flow (email → OTP → verify → reset password)
+ *  - signup: if email exists but unverified, deletes old record and re-registers
+ *  - login: if user unverified, auto-sends fresh OTP and returns needsVerification flag
+ *  - Added verifyEmailOtp, resendVerifyOtp, forgotPassword, verifyResetOtp, resetPassword
+ * Imports added: sendOtpEmail from emailHandler.js
+ */
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import { generateToken } from "../lib/utils.js";
