@@ -1,3 +1,13 @@
+/*
+ * CHANGED: emailHandler.js
+ * Date: 2025
+ * Changes:
+ *  - Replaced Resend client with Nodemailer transporter
+ *  - sendWelcomeEmail: now uses nodemailer + createWelcomeEmailTemplate
+ *  - Added sendOtpEmail(email, name, otp, purpose): sends verify or reset OTP email
+ * Imports added: transporter, MAIL_FROM from ../lib/nodemailer
+ *               createOtpEmailTemplate from ./emailTemplates
+ */
 import { transporter, MAIL_FROM } from "../lib/nodemailer.js";
 import { createWelcomeEmailTemplate, createOtpEmailTemplate } from "./emailTemplates.js";
 import { ENV } from "../lib/env.js";
