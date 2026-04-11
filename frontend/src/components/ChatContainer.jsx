@@ -18,6 +18,7 @@ import NoChatHistoryPlaceholder from "./NoChatHistoryPlaceholder";
 import NoConversationPlaceholder from "./NoConversationPlaceholder";
 import MessageInput from "./MessageInput";
 import MessagesLoadingSkeleton from "./MessagesLoadingSkeleton";
+import AudioMessagePlayer from "./AudioMessagePlayer";
 
 function ChatContainer() {
   const {
@@ -94,6 +95,9 @@ function ChatContainer() {
                     >
                       {msg.image && (
                         <img src={msg.image} alt="Shared" className="rounded-lg h-48 object-cover" />
+                      )}
+                      {msg.audio && (
+                        <AudioMessagePlayer src={msg.audio} isMine={isMine} />
                       )}
                       {msg.text && (
                         <p className={`mt-2 ${translatingNow ? "opacity-50" : ""}`}>

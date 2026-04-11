@@ -32,10 +32,15 @@ if (ENV.NODE_ENV === "production") {
 }
 
 
-server.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-    connectDB();
-})
+// Connect DB first, then start server — prevents "buffering timed out" on early requests
+connectDB().then(() => {
+    server.listen(PORT, () => {
+        console.log(`Server is running on port ${PORT}`);
+    });
+}).catch((err) => {
+    console.error('Failed to connect to MongoDB, server not started:', err);
+    process.exit(1);
+});
 
 // Error handler for JSON parse errors and other errors — respond with JSON
 app.use((err, req, res, next) => {

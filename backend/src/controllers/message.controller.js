@@ -10,6 +10,7 @@ import Message from "../models/Message.js";
 import User from "../models/User.js";
 import cloudinary from "../lib/cloudinary.js";
 import { io, getReceiverSocketId } from "../lib/socket.js";
+import streamifier from "streamifier";
 
 
 
@@ -72,7 +73,6 @@ export const sendMessage = async (req, res) => {
 
     let imageUrl;
     if (image) {
-      // upload base64 image to cloudinary
       const uploadResponse = await cloudinary.uploader.upload(image);
       imageUrl = uploadResponse.secure_url;
     }
@@ -128,6 +128,62 @@ export const getChatPartners = async (req, res) => {
     res.status(200).json(chatPartners);
   } catch (error) {
     console.error("Error in getChatPartners: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Stream-upload audio blob to Cloudinary, save message, emit via socket
+function streamUploadToCloudinary(buffer) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { resource_type: "video", folder: "chat_audio", public_id: `audio_${Date.now()}` },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result);
+      }
+    );
+    streamifier.createReadStream(buffer).pipe(stream);
+  });
+}
+
+export const sendAudioMessage = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "Audio file is required." });
+    }
+
+    const receiverId = req.params.id || req.body.receiverId;
+    const senderId = req.user._id;
+
+    if (!receiverId) {
+      return res.status(400).json({ message: "Receiver id is required." });
+    }
+    if (senderId.toString() === receiverId) {
+      return res.status(400).json({ message: "Cannot send messages to yourself." });
+    }
+    const receiverExists = await User.exists({ _id: receiverId });
+    if (!receiverExists) {
+      return res.status(404).json({ message: "Receiver not found." });
+    }
+
+    const result = await streamUploadToCloudinary(req.file.buffer);
+
+    const newMessage = new Message({
+      senderId,
+      receiverId,
+      audio: result.secure_url,
+    });
+    await newMessage.save();
+
+    const receiverSocketId = getReceiverSocketId(receiverId);
+    if (receiverSocketId) io.to(receiverSocketId).emit("newMessage", newMessage);
+
+    const senderSocketId = getReceiverSocketId(senderId);
+    if (senderSocketId) io.to(senderSocketId).emit("newMessage", newMessage);
+
+    res.status(201).json(newMessage);
+  } catch (error) {
+    console.error("Error in sendAudioMessage:", error.message);
     res.status(500).json({ error: "Internal server error" });
   }
 };

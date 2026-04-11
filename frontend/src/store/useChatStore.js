@@ -28,6 +28,7 @@ export const useChatStore = create((set, get) => ({
 
   setActiveTab: (tab) => set({ activeTab: tab }),
   setSelectedUser: (selectedUser) => set({ selectedUser }),
+  addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
 
   getAllContacts: async () => {
     set({ isUsersLoading: true });
@@ -83,6 +84,7 @@ export const useChatStore = create((set, get) => ({
       receiverId: selectedUser._id,
       text: messageData.text,
       image: messageData.image,
+      audio: messageData.audio, // local blob URL for instant preview
       createdAt: new Date().toISOString(),
       isOptimistic: true,
     };

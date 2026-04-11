@@ -16,6 +16,7 @@ export const ENV = {
     ARCJET_ENV: process.env.ARCJET_ENV,
     GMAIL_USER: process.env.GMAIL_USER,
     GMAIL_APP_PASSWORD: process.env.GMAIL_APP_PASSWORD,
+    ASSEMBLYAI_API_KEY: process.env.ASSEMBLYAI_API_KEY,
 }
 
 
