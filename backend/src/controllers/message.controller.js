@@ -108,18 +108,21 @@ export const getChatPartners = async (req, res) => {
   try {
     const loggedInUserId = req.user._id;
 
-    // find all the messages where the logged-in user is either sender or receiver
+    // only DM messages (receiverId is set, groupId is null)
     const messages = await Message.find({
+      groupId: null,
       $or: [{ senderId: loggedInUserId }, { receiverId: loggedInUserId }],
     });
 
     const chatPartnerIds = [
       ...new Set(
-        messages.map((msg) =>
-          msg.senderId.toString() === loggedInUserId.toString()
-            ? msg.receiverId.toString()
-            : msg.senderId.toString()
-        )
+        messages
+          .filter((msg) => msg.receiverId != null) // guard: skip any null receiverId
+          .map((msg) =>
+            msg.senderId.toString() === loggedInUserId.toString()
+              ? msg.receiverId.toString()
+              : msg.senderId.toString()
+          )
       ),
     ];
 

@@ -2,6 +2,7 @@ import express from 'express'
 import dotenv from 'dotenv'
 import authRoutes from './routes/auth.route.js';
 import messageRoutes from './routes/message.route.js';
+import groupRoutes from './routes/group.route.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { connectDB } from './lib/db.js';
@@ -24,6 +25,7 @@ console.log(ENV.PORT);
 const PORT = ENV.PORT || 3001;
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/groups", groupRoutes);
 if (ENV.NODE_ENV === "production") {
     app.use(express.static(path.join(__dirname, "../frontend/dist")));
     app.get("*", (_, res) => {
