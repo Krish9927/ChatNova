@@ -7,10 +7,17 @@ const messageSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    // for DM: receiverId is set, groupId is null
     receiverId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      default: null,
+    },
+    // for group: groupId is set, receiverId is null
+    groupId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Group",
+      default: null,
     },
     text: {
       type: String,
@@ -21,12 +28,11 @@ const messageSchema = new mongoose.Schema(
       type: String,
     },
     audio: {
-      type: String, // Cloudinary URL of the audio file
+      type: String,
     },
   },
   { timestamps: true }
 );
 
 const Message = mongoose.model("Message", messageSchema);
-
 export default Message;

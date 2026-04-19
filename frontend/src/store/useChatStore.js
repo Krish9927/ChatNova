@@ -20,6 +20,8 @@ export const useChatStore = create((set, get) => ({
   isUsersLoading: false,
   isMessagesLoading: false,
   isSoundEnabled: localStorage.getItem("isSoundEnabled") === "true",
+  // unread DM counts: { [senderId]: count }
+  unreadDM: {},
 
   toggleSound: () => {
     localStorage.setItem("isSoundEnabled", !get().isSoundEnabled);
@@ -27,7 +29,28 @@ export const useChatStore = create((set, get) => ({
   },
 
   setActiveTab: (tab) => set({ activeTab: tab }),
-  setSelectedUser: (selectedUser) => set({ selectedUser }),
+
+  setSelectedUser: (selectedUser) => {
+    // clear unread count for this user when opening the chat
+    if (selectedUser) {
+      set((s) => {
+        const unreadDM = { ...s.unreadDM };
+        delete unreadDM[selectedUser._id];
+        return { selectedUser, unreadDM };
+      });
+    } else {
+      set({ selectedUser });
+    }
+  },
+
+  clearUnreadDM: (userId) => {
+    set((s) => {
+      const unreadDM = { ...s.unreadDM };
+      delete unreadDM[userId];
+      return { unreadDM };
+    });
+  },
+
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
 
   getAllContacts: async () => {
@@ -105,22 +128,31 @@ export const useChatStore = create((set, get) => ({
     }
   },
   subscribeToMessages: () => {
-    const { selectedUser } = get();
-    if (!selectedUser) return;
-
     const socket = useAuthStore.getState().socket;
     if (!socket) return;
 
+    socket.off("newMessage");
     socket.on("newMessage", (newMessage) => {
-      const isMessageSentFromSelectedUser = newMessage.senderId === selectedUser._id;
-      if (!isMessageSentFromSelectedUser) return;
+      const { selectedUser } = get();
+      const senderId = newMessage.senderId;
 
-      set((state) => ({ messages: [...state.messages, newMessage] }));
+      if (selectedUser && senderId === selectedUser._id) {
+        // conversation is open — append message
+        set((state) => ({ messages: [...state.messages, newMessage] }));
+      } else {
+        // conversation not open — increment unread count
+        set((s) => ({
+          unreadDM: {
+            ...s.unreadDM,
+            [senderId]: (s.unreadDM[senderId] || 0) + 1,
+          },
+        }));
+      }
 
       if (get().isSoundEnabled) {
         const notificationSound = new Audio("/sounds/notification.mp3");
         notificationSound.currentTime = 0;
-        notificationSound.play().catch((e) => console.log("Audio play failed:", e));
+        notificationSound.play().catch(() => { });
       }
     });
   },

@@ -28,6 +28,7 @@ function ChatContainer() {
   const { authUser } = useAuthStore();
   const { getLang, translateMessages, getTranslated, isTranslating } = useTranslationStore();
   const messagesContainerRef = useRef(null);
+  const isInitialLoad = useRef(true);
 
   const targetLang = selectedUser ? getLang(selectedUser._id) : "default";
 
@@ -53,13 +54,25 @@ function ChatContainer() {
     }
   }, [targetLang, messages, translateMessages]);
 
-  // auto-scroll
+  // reset initial load flag when conversation changes
+  useEffect(() => {
+    isInitialLoad.current = true;
+  }, [selectedUser]);
+
+  // auto-scroll: instant on initial load, smooth for new messages
   useEffect(() => {
     const el = messagesContainerRef.current;
-    if (!el) return;
-    try { el.scrollTo({ top: el.scrollHeight, behavior: "smooth" }); }
-    catch { el.scrollTop = el.scrollHeight; }
-  }, [messages]);
+    if (!el || isMessagesLoading) return;
+
+    if (isInitialLoad.current) {
+      // jump instantly to bottom — no visible scroll animation
+      el.scrollTop = el.scrollHeight;
+      isInitialLoad.current = false;
+    } else {
+      // smooth scroll only for newly arriving messages
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }
+  }, [messages, isMessagesLoading]);
 
   return (
     <>
