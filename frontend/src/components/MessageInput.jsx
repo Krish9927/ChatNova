@@ -3,8 +3,9 @@ import useKeyboardSound from "../hooks/useKeyboardSound";
 import { useChatStore } from "../store/useChatStore";
 import { axiosInstance } from "../lib/axios";
 import toast from "react-hot-toast";
-import { ImageIcon, SendIcon, XIcon } from "lucide-react";
+import { Paperclip, Send, X, Smile } from "lucide-react";
 import VoiceRecorder from "./VoiceRecorder";
+import StickerPicker from "./StickerPicker";
 import { createSTT } from "../lib/speechToText";
 
 function MessageInput() {
@@ -12,17 +13,16 @@ function MessageInput() {
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [showStickers, setShowStickers] = useState(false);
 
   const fileInputRef = useRef(null);
   const sttRef = useRef(null);
-
   const { sendMessage, isSoundEnabled } = useChatStore();
 
-  const handleSendMessage = (e) => {
+  const handleSend = (e) => {
     e.preventDefault();
     if (!text.trim() && !imagePreview) return;
     if (isSoundEnabled) playRandomKeyStrokeSound();
-
     sendMessage({ text: text.trim(), image: imagePreview });
     setText("");
     setImagePreview("");
@@ -31,54 +31,41 @@ function MessageInput() {
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please select an image file");
-      return;
-    }
+    if (!file?.type.startsWith("image/")) { toast.error("Please select an image file"); return; }
     const reader = new FileReader();
     reader.onloadend = () => setImagePreview(reader.result);
     reader.readAsDataURL(file);
   };
 
-  const removeImage = () => {
-    setImagePreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+  // Send sticker as a message
+  const handleStickerSelect = (sticker) => {
+    sendMessage({ sticker: sticker.value });
+    setShowStickers(false);
   };
 
-  // Called by VoiceRecorder when user clicks Send — receives raw Blob
   const handleVoiceSend = async (audioBlob) => {
     const { selectedUser } = useChatStore.getState();
     if (!selectedUser) return;
-
     const formData = new FormData();
     formData.append("audio", audioBlob, "voice-message.webm");
-
     try {
-      // use axiosInstance but override Content-Type so axios sets multipart boundary
-      const res = await axiosInstance.post(
-        `/messages/send-audio/${selectedUser._id}`,
-        formData,
-        { headers: { "Content-Type": "multipart/form-data" } }
-      );
-      // add the confirmed message to the store
+      const res = await axiosInstance.post(`/messages/send-audio/${selectedUser._id}`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
       useChatStore.getState().addMessage(res.data);
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to send voice message");
     }
   };
 
-  // Called by VoiceRecorder when user clicks STT button
   const handleTranscribe = async (audioBlob) => {
     setIsTranscribing(true);
     toast("Transcribing...", { icon: "🎙️", id: "stt" });
-
     try {
       let finalText = "";
-
       const stt = await createSTT({
         onResult: ({ final, interim }) => {
           if (final) finalText += final + " ";
-          // show interim in input as live preview
           setText(finalText + interim);
         },
         onEnd: () => {
@@ -93,94 +80,93 @@ function MessageInput() {
           toast.error(`STT error: ${msg}`);
         },
       });
-
-      if (!stt) {
-        setIsTranscribing(false);
-        toast.dismiss("stt");
-        return;
-      }
-
+      if (!stt) { setIsTranscribing(false); toast.dismiss("stt"); return; }
       sttRef.current = stt;
-
-      // If online → Web Speech API does live mic, no blob needed
-      // If offline → Vosk needs the blob
-      if (navigator.onLine) {
-        stt.start();
-        // auto-stop after 30s safety limit
-        setTimeout(() => stt.stop(), 30000);
-      } else {
-        await stt.start(audioBlob);
-      }
-    } catch (err) {
+      if (navigator.onLine) { stt.start(); setTimeout(() => stt.stop(), 30000); }
+      else await stt.start(audioBlob);
+    } catch {
       setIsTranscribing(false);
       toast.dismiss("stt");
       toast.error("Transcription failed");
-      console.error(err);
     }
   };
 
   return (
-    <div className="p-4 border-t border-slate-700/50">
+    <div className="px-4 py-3 border-t border-white/5 bg-[#0d1117]/60">
+      {/* Image preview */}
       {imagePreview && (
-        <div className="max-w-3xl mx-auto mb-3 flex items-center">
+        <div className="mb-2 flex items-center">
           <div className="relative">
-            <img
-              src={imagePreview}
-              alt="Preview"
-              className="w-20 h-20 object-cover rounded-lg border border-slate-700"
-            />
+            <img src={imagePreview} alt="Preview" className="w-16 h-16 object-cover rounded-lg border border-white/10" />
             <button
-              onClick={removeImage}
-              className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-slate-200 hover:bg-slate-700"
+              onClick={() => { setImagePreview(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+              className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 hover:bg-slate-600"
               type="button"
             >
-              <XIcon className="w-4 h-4" />
+              <X className="w-3 h-3" />
             </button>
           </div>
         </div>
       )}
 
-      <form onSubmit={handleSendMessage} className="max-w-3xl mx-auto flex items-center gap-2">
-        <input
-          type="text"
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            isSoundEnabled && playRandomKeyStrokeSound();
-          }}
-          className={`flex-1 bg-slate-800/50 border border-slate-700/50 rounded-lg py-2 px-4 ${isTranscribing ? "border-cyan-500/60 text-cyan-300" : ""
-            }`}
-          placeholder={isTranscribing ? "Listening..." : "Type your message..."}
-        />
+      <form onSubmit={handleSend} className="flex items-center gap-2">
+        {/* Text input */}
+        <div className="flex-1 flex items-center gap-2 bg-white/5 border border-white/8 rounded-2xl px-4 py-2.5">
+          <input
+            type="text"
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              isSoundEnabled && playRandomKeyStrokeSound();
+            }}
+            placeholder={isTranscribing ? "Listening..." : "Type a message..."}
+            className={`flex-1 bg-transparent text-sm outline-none placeholder-slate-500 ${isTranscribing ? "text-cyan-300" : "text-slate-100"
+              }`}
+          />
+          {/* Attachment */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className={`shrink-0 text-slate-500 hover:text-slate-300 transition-colors ${imagePreview ? "text-cyan-400" : ""}`}
+          >
+            <Paperclip className="w-4 h-4" />
+          </button>
+        </div>
 
-        <input
-          type="file"
-          accept="image/*"
-          ref={fileInputRef}
-          onChange={handleImageChange}
-          className="hidden"
-        />
+        <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageChange} className="hidden" />
 
-        {/* image picker */}
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className={`bg-slate-800/50 text-slate-400 hover:text-slate-200 rounded-lg px-3 py-2 transition-colors ${imagePreview ? "text-cyan-500" : ""
-            }`}
-        >
-          <ImageIcon className="w-5 h-5" />
-        </button>
+        {/* Sticker button */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowStickers((v) => !v)}
+            className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${showStickers
+                ? "bg-cyan-500/20 text-cyan-400"
+                : "bg-white/5 text-slate-400 hover:text-slate-200 hover:bg-white/8"
+              }`}
+            title="Stickers"
+          >
+            <Smile className="w-5 h-5" />
+          </button>
 
-        {/* voice recorder */}
+          {showStickers && (
+            <StickerPicker
+              onSelect={handleStickerSelect}
+              onClose={() => setShowStickers(false)}
+            />
+          )}
+        </div>
+
+        {/* Voice recorder */}
         <VoiceRecorder onSend={handleVoiceSend} onTranscribe={handleTranscribe} />
 
-        {/* send text/image */}
+        {/* Send button */}
         <button
           type="submit"
           disabled={!text.trim() && !imagePreview}
-          className="bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-lg px-4 py-2 font-medium hover:from-cyan-600 hover:to-cyan-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-10 h-10 flex items-center justify-center rounded-xl bg-cyan-500 hover:bg-cyan-400 text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
         >
-          <SendIcon className="w-5 h-5" />
+          <Send className="w-4 h-4" />
         </button>
       </form>
     </div>

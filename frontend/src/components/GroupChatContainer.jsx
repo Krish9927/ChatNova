@@ -112,7 +112,7 @@ function GroupChatContainer() {
     if (!selectedGroup) return null;
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50 bg-slate-900/50 min-h-[64px]">
                 <div className="flex items-center gap-3 min-w-0">
@@ -230,7 +230,16 @@ function GroupChatContainer() {
             )}
 
             {/* Messages */}
-            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+            <div
+                ref={messagesContainerRef}
+                className="flex-1 overflow-y-auto px-4 py-4 space-y-1"
+                style={{
+                    backgroundImage: "url('/bg.png')",
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
+                    backgroundAttachment: "local",
+                }}
+            >
                 {isGroupMessagesLoading ? (
                     <p className="text-center text-slate-500 text-sm">Loading...</p>
                 ) : groupMessages.length === 0 ? (
@@ -259,12 +268,15 @@ function GroupChatContainer() {
                                     {!isMine && (
                                         <span className="text-xs text-cyan-400 mb-1 ml-1">{sender?.username}</span>
                                     )}
-                                    <div className={`rounded-2xl px-3 py-2 ${isMine ? "bg-cyan-600 text-white" : "bg-slate-800 text-slate-200"}`}>
+                                    <div className={`rounded-2xl px-3 py-2 ${isMine ? "bg-cyan-500 text-white" : "bg-[#1a3a5c]/90 text-slate-100"}`}>
                                         {msg.image && (
                                             <img src={msg.image} className="rounded-lg h-48 object-cover mb-1" alt="" />
                                         )}
                                         {msg.audio && (
                                             <AudioMessagePlayer src={msg.audio} isMine={isMine} />
+                                        )}
+                                        {msg.sticker && (
+                                            <span className="text-5xl leading-none block">{msg.sticker}</span>
                                         )}
                                         {msg.text && (
                                             <p className={`text-sm ${translatingNow ? "opacity-50" : ""}`}>

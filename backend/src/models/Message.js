@@ -30,6 +30,9 @@ const messageSchema = new mongoose.Schema(
     audio: {
       type: String,
     },
+    sticker: {
+      type: String, // emoji character or image URL
+    },
   },
   { timestamps: true }
 );
