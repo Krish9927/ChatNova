@@ -26,14 +26,20 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // Step 1 — register, get OTP email
+  // Step 1 — register
   signup: async (data) => {
     set({ isSigningUp: true });
     try {
       const res = await axiosInstance.post("/auth/signup", data);
-      set({ pendingEmail: res.data.email });
-      toast.success("OTP sent to your email!");
-      return "verify"; // signal to navigate to OTP screen
+      if (res.data.needsVerification) {
+        set({ pendingEmail: res.data.email });
+        toast.success("OTP sent! Check your email.");
+        return "verify";
+      }
+      set({ authUser: res.data });
+      toast.success("Account created successfully!");
+      get().connectSocket();
+      return "success";
     } catch (error) {
       toast.error(error.response?.data?.message ?? "Could not create account");
     } finally {

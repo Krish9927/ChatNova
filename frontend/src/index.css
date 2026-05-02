@@ -1,5 +1,12 @@
 @import "tailwindcss";
 @plugin "daisyui";
+
+/* Prevent page-level scroll — chat fills the full viewport */
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
 @property --border-angle {
   inherits: false;
   initial-value: 0deg;

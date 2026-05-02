@@ -55,12 +55,12 @@ export const signup = async (req, res) => {
         });
         await newUser.save();
 
-        // send OTP email (non-blocking — don't fail signup if email fails)
-        sendOtpEmail(email, fullName, otp, "verify").catch(console.error);
+        await sendOtpEmail(email, fullName, otp, "verify");
 
         res.status(201).json({
-            message: "Account created. Check your email for the OTP.",
-            email, // send back so frontend can pre-fill the verify screen
+            message: "OTP sent to your email. Please verify to continue.",
+            needsVerification: true,
+            email,
         });
     } catch (error) {
         console.error("Error in signup:", error);
@@ -216,13 +216,17 @@ export const login = async (req, res) => {
         if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
 
         if (!user.isVerified) {
-            // resend a fresh OTP so they can verify right from the login screen
+            // send a fresh OTP and ask frontend to redirect to verify screen
             const otp = generateOtp();
             user.verifyOtp = otp;
             user.verifyOtpExpiry = new Date(Date.now() + OTP_TTL);
             await user.save();
-            sendOtpEmail(user.email, user.username, otp, "verify").catch(console.error);
-            return res.status(403).json({ message: "Please verify your email. A new OTP has been sent.", email, needsVerification: true });
+            await sendOtpEmail(user.email, user.username, otp, "verify").catch(console.error);
+            return res.status(403).json({
+                message: "Email not verified. A new OTP has been sent.",
+                needsVerification: true,
+                email: user.email,
+            });
         }
 
         generateToken(user._id, res);

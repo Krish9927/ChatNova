@@ -221,7 +221,7 @@ export const getGroupMessages = async (req, res) => {
 // ── Send group message ────────────────────────────────────────────────────────
 export const sendGroupMessage = async (req, res) => {
     try {
-        const { text, image } = req.body;
+        const { text, image, sticker } = req.body;
         const groupId = req.params.id;
         const senderId = req.user._id;
 
@@ -231,7 +231,7 @@ export const sendGroupMessage = async (req, res) => {
         const isMember = group.members.some((m) => m.toString() === senderId.toString());
         if (!isMember) return res.status(403).json({ message: "Not a member" });
 
-        if (!text && !image) return res.status(400).json({ message: "Text or image required" });
+        if (!text && !image && !sticker) return res.status(400).json({ message: "Text, image, or sticker required" });
 
         let imageUrl;
         if (image) {
@@ -239,7 +239,7 @@ export const sendGroupMessage = async (req, res) => {
             imageUrl = upload.secure_url;
         }
 
-        const newMessage = new Message({ senderId, groupId, text, image: imageUrl });
+        const newMessage = new Message({ senderId, groupId, text, image: imageUrl, sticker: sticker || undefined });
         await newMessage.save();
 
         const populated = await Message.findById(newMessage._id)

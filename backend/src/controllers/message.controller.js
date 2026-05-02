@@ -8,6 +8,7 @@
  */
 import Message from "../models/Message.js";
 import User from "../models/User.js";
+import FriendRequest from "../models/FriendRequest.js";
 import cloudinary from "../lib/cloudinary.js";
 import { io, getReceiverSocketId } from "../lib/socket.js";
 import streamifier from "streamifier";
@@ -49,7 +50,7 @@ export const getMessagesByUserId = async (req, res) => {
 
 export const sendMessage = async (req, res) => {
   try {
-    const { text, image, receiverId: receiverFromBody } = req.body;
+    const { text, image, sticker, receiverId: receiverFromBody } = req.body;
     const receiverId = req.params.id || receiverFromBody;
     const senderId = req.user._id;
 
@@ -60,8 +61,8 @@ export const sendMessage = async (req, res) => {
       });
     }
 
-    if (!text && !image) {
-      return res.status(400).json({ message: "Text or image is required." });
+    if (!text && !image && !sticker) {
+      return res.status(400).json({ message: "Text, image, or sticker is required." });
     }
     if (senderId.equals(receiverId)) {
       return res.status(400).json({ message: "Cannot send messages to yourself." });
@@ -82,6 +83,7 @@ export const sendMessage = async (req, res) => {
       receiverId,
       text,
       image: imageUrl,
+      sticker: sticker || undefined,
     });
 
     await newMessage.save();

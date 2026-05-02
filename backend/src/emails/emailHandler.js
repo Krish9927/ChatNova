@@ -1,35 +1,21 @@
-/*
+/**
  * emailHandler.js
- * Primary:  Resend API (re_LunP8Hpc...)
- * Fallback: Nodemailer / Gmail SMTP
- *
- * Resend is tried first — if it fails or isn't configured, falls back to Gmail.
+ * Uses Nodemailer (Gmail SMTP) only.
+ * Requires GMAIL_USER and GMAIL_APP_PASSWORD in .env
  */
-import { resendClient, sender, isResendConfigured } from "../lib/resend.js";
 import { transporter, MAIL_FROM } from "../lib/nodemailer.js";
 import { createWelcomeEmailTemplate, createOtpEmailTemplate } from "./emailTemplates.js";
 import { ENV } from "../lib/env.js";
 
 async function sendEmail({ to, subject, html }) {
-  // ── Try Resend first ──────────────────────────────────────────────────────
-  if (isResendConfigured()) {
-    try {
-      await resendClient.emails.send({
-        from: `${sender.name} <${sender.email}>`,
-        to,
-        subject,
-        html,
-      });
-      console.log(`[email] Sent via Resend to ${to}`);
-      return;
-    } catch (err) {
-      console.warn("[email] Resend failed, trying Gmail:", err.message);
-    }
+  console.log(`[email] Sending to ${to} via Gmail SMTP (${ENV.GMAIL_USER})`);
+  try {
+    const info = await transporter.sendMail({ from: MAIL_FROM, to, subject, html });
+    console.log(`[email] Sent successfully. MessageId: ${info.messageId}`);
+  } catch (err) {
+    console.error(`[email] FAILED to send to ${to}:`, err.message);
+    throw err; // re-throw so the controller can return a 500
   }
-
-  // ── Fallback: Gmail SMTP ──────────────────────────────────────────────────
-  await transporter.sendMail({ from: MAIL_FROM, to, subject, html });
-  console.log(`[email] Sent via Gmail to ${to}`);
 }
 
 export const sendWelcomeEmail = async (email, name) => {
