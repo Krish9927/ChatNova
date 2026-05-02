@@ -8,6 +8,7 @@
  */
 import Message from "../models/Message.js";
 import User from "../models/User.js";
+import FriendRequest from "../models/FriendRequest.js";
 import cloudinary from "../lib/cloudinary.js";
 import { io, getReceiverSocketId } from "../lib/socket.js";
 import streamifier from "streamifier";

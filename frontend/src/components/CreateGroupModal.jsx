@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, Users } from "lucide-react";
 import { useGroupStore } from "../store/useGroupStore";
-import { useChatStore } from "../store/useChatStore";
+import { useFriendStore } from "../store/useFriendStore";
 
 function CreateGroupModal({ onClose }) {
     const [name, setName] = useState("");
@@ -9,8 +9,12 @@ function CreateGroupModal({ onClose }) {
     const [selectedIds, setSelectedIds] = useState([]);
     const [loading, setLoading] = useState(false);
 
-    const { allContacts } = useChatStore();
+    const { friends, fetchFriends } = useFriendStore();
     const { createGroup } = useGroupStore();
+
+    useEffect(() => {
+        fetchFriends();
+    }, []);
 
     const toggleMember = (id) => {
         setSelectedIds((prev) =>
@@ -63,34 +67,40 @@ function CreateGroupModal({ onClose }) {
                         />
                     </div>
 
-                    {/* Member picker */}
+                    {/* Member picker — only friends */}
                     <div>
                         <label className="text-sm text-slate-400 mb-2 block">
-                            Add Members ({selectedIds.length} selected)
+                            Add Contacts ({selectedIds.length} selected)
                         </label>
-                        <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
-                            {allContacts.map((user) => (
-                                <button
-                                    key={user._id}
-                                    type="button"
-                                    onClick={() => toggleMember(user._id)}
-                                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-left ${selectedIds.includes(user._id)
+                        {friends.length === 0 ? (
+                            <p className="text-xs text-slate-600 text-center py-4">
+                                No contacts yet. Add friends first.
+                            </p>
+                        ) : (
+                            <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+                                {friends.map((user) => (
+                                    <button
+                                        key={user._id}
+                                        type="button"
+                                        onClick={() => toggleMember(user._id)}
+                                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-left ${selectedIds.includes(user._id)
                                             ? "bg-cyan-500/20 border border-cyan-500/40"
                                             : "hover:bg-slate-700"
-                                        }`}
-                                >
-                                    <img
-                                        src={user.profilePic || "/avatar.png"}
-                                        className="w-8 h-8 rounded-full object-cover"
-                                        alt={user.username}
-                                    />
-                                    <span className="text-sm text-slate-200">{user.username}</span>
-                                    {selectedIds.includes(user._id) && (
-                                        <span className="ml-auto text-cyan-400 text-xs">✓</span>
-                                    )}
-                                </button>
-                            ))}
-                        </div>
+                                            }`}
+                                    >
+                                        <img
+                                            src={user.profilePic || "/avatar.png"}
+                                            className="w-8 h-8 rounded-full object-cover"
+                                            alt={user.username}
+                                        />
+                                        <span className="text-sm text-slate-200">{user.username}</span>
+                                        {selectedIds.includes(user._id) && (
+                                            <span className="ml-auto text-cyan-400 text-xs">✓</span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
 
