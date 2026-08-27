@@ -77,7 +77,7 @@ export const updateGroup = async (req, res) => {
         if (group.admin.toString() !== req.user._id.toString())
             return res.status(403).json({ message: "Only admin can update group" });
 
-        const { name, description, avatar } = req.body;
+        const {name, description, avatar } = req.body;
         if (name) group.name = name.trim();
         if (description !== undefined) group.description = description.trim();
         if (avatar) {

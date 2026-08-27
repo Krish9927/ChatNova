@@ -17,6 +17,8 @@ export const ENV = {
     GMAIL_USER: process.env.GMAIL_USER,
     GMAIL_APP_PASSWORD: process.env.GMAIL_APP_PASSWORD,
     ASSEMBLYAI_API_KEY: process.env.ASSEMBLYAI_API_KEY,
+    DATABASE_URL: process.env.DATABASE_URL,
+    REDIS_URL: process.env.REDIS_URL,
 }
 
 

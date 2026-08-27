@@ -7,6 +7,7 @@ import friendRoutes from './routes/friend.route.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { connectDB } from './lib/db.js';
+import { initPostgresDB } from './lib/db-init.js';
 import { ENV } from './lib/env.js';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
@@ -34,14 +35,16 @@ if (ENV.NODE_ENV === "production") {
     });
 }
 
-connectDB().then(() => {
-    server.listen(PORT, () => {
-        console.log(`Server is running on port ${PORT}`);
+Promise.all([connectDB(), initPostgresDB()])
+    .then(() => {
+        server.listen(PORT, () => {
+            console.log(`Server is running on port ${PORT}`);
+        });
+    })
+    .catch((err) => {
+        console.error('Failed to initialize databases, server not started:', err);
+        process.exit(1);
     });
-}).catch((err) => {
-    console.error('Failed to connect to MongoDB, server not started:', err);
-    process.exit(1);
-});
 
 app.use((err, req, res, next) => {
     if (err && err.type === 'entity.parse.failed') {

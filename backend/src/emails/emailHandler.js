@@ -36,4 +36,4 @@ export const sendOtpEmail = async (email, name, otp, purpose) => {
     subject,
     html: createOtpEmailTemplate(name, otp, purpose),
   });
-};
+}; 
