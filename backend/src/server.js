@@ -8,10 +8,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { connectDB } from './lib/db.js';
 import { initPostgresDB } from './lib/db-init.js';
+import { connectRedis } from './lib/redis.js';
 import { ENV } from './lib/env.js';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
-import { io, app, server } from './lib/socket.js';
+import { io, app, server, attachRedisAdapter } from './lib/socket.js';
 
 app.use(cors({ origin: ENV.CLIENT_URL, credentials: true }));
 app.use(cookieParser());
@@ -35,8 +36,10 @@ if (ENV.NODE_ENV === "production") {
     });
 }
 
-Promise.all([connectDB(), initPostgresDB()])
+Promise.all([connectDB(), initPostgresDB(), connectRedis()])
     .then(() => {
+        // Attach Redis adapter AFTER Redis clients are connected
+        attachRedisAdapter();
         server.listen(PORT, () => {
             console.log(`Server is running on port ${PORT}`);
         });
