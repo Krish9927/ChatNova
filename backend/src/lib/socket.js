@@ -5,6 +5,7 @@ import express from "express";
 import { ENV } from "./env.js";
 import { socketAuthMiddleware } from "../middleware/socket.auth.middleware.js";
 import { pubClient, subClient, redisClient } from "./redis.js";
+import pool from "./pg.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -85,21 +86,87 @@ io.on("connection", async (socket) => {
   // Mark user online in Redis with TTL
   await setUserOnline(userId, socket.id);
 
-  // Broadcast updated online list to ALL connected clients across all servers
-  const onlineIds = await getOnlineUserIds();
-  io.emit("getOnlineUsers", onlineIds);
+  // Broadcast updated online list (presence_update) to ALL connected clients across all servers
+  const broadcastPresence = async () => {
+    const onlineIds = await getOnlineUserIds();
+    io.emit("getOnlineUsers", onlineIds);
+    io.emit("presence_update", onlineIds);
+  };
+  await broadcastPresence();
 
   // Refresh TTL every 25 seconds (heartbeat) so active users never expire
   const heartbeat = setInterval(async () => {
     await setUserOnline(userId, socket.id);
   }, 25000);
 
+  // --- Room Events ---
+  socket.on("join_room", (roomId) => {
+    if (!roomId) return;
+    socket.join(roomId);
+    console.log(`[room] User ${socket.user.username} joined room: ${roomId}`);
+    // Notify other room members
+    socket.to(roomId).emit("user_joined", {
+      userId: socket.userId,
+      username: socket.user.username,
+    });
+  });
+
+  socket.on("leave_room", (roomId) => {
+    if (!roomId) return;
+    socket.leave(roomId);
+    console.log(`[room] User ${socket.user.username} left room: ${roomId}`);
+    // Notify other room members
+    socket.to(roomId).emit("user_left", {
+      userId: socket.userId,
+      username: socket.user.username,
+    });
+  });
+
+  socket.on("send_message", async (data) => {
+    const { roomId, content } = data;
+    if (!roomId || !content) return;
+
+    try {
+      // Save message to PostgreSQL
+      const queryText = `
+        INSERT INTO messages (room_id, sender_id, content)
+        VALUES ($1, $2, $3)
+        RETURNING id, room_id, sender_id, content, created_at
+      `;
+      const values = [roomId, socket.userId, content];
+      const { rows } = await pool.query(queryText, values);
+      const savedMessage = rows[0];
+
+      // Emit new_message to all clients in the room (including sender)
+      io.to(roomId).emit("new_message", savedMessage);
+    } catch (error) {
+      console.error("[postgres] Error saving message:", error);
+    }
+  });
+
+  // --- Typing indicators ---
+  socket.on("typing_start", (roomId) => {
+    if (!roomId) return;
+    socket.to(roomId).emit("typing_start", {
+      userId: socket.userId,
+      username: socket.user.username,
+    });
+  });
+
+  socket.on("typing_stop", (roomId) => {
+    if (!roomId) return;
+    socket.to(roomId).emit("typing_stop", {
+      userId: socket.userId,
+      username: socket.user.username,
+    });
+  });
+
+  // --- Disconnect handler ---
   socket.on("disconnect", async () => {
     console.log("A user disconnected:", socket.user.username);
     clearInterval(heartbeat);
     await setUserOffline(userId);
-    const updatedIds = await getOnlineUserIds();
-    io.emit("getOnlineUsers", updatedIds);
+    await broadcastPresence();
   });
 });
 

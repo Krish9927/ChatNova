@@ -4,6 +4,7 @@ import authRoutes from './routes/auth.route.js';
 import messageRoutes from './routes/message.route.js';
 import groupRoutes from './routes/group.route.js';
 import friendRoutes from './routes/friend.route.js';
+import roomRoutes from './routes/room.route.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { connectDB } from './lib/db.js';
@@ -28,6 +29,11 @@ app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/groups", groupRoutes);
 app.use("/api/friends", friendRoutes);
+app.use("/api/rooms", roomRoutes);
+
+app.get("/test-client", (req, res) => {
+    res.sendFile(path.join(path.resolve(), "public/test-client.html"));
+});
 
 if (ENV.NODE_ENV === "production") {
     app.use(express.static(path.join(__dirname, "../frontend/dist")));
