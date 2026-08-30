@@ -9,7 +9,6 @@ export const useFriendStore = create((set, get) => ({
     sentRequests: [],      // outgoing
     searchResults: [],
     isSearching: false,
-    isLoading: false,
 
     // ── Fetch friends ─────────────────────────────────────────────────────
     fetchFriends: async () => {
@@ -72,12 +71,14 @@ export const useFriendStore = create((set, get) => ({
     acceptRequest: async (requestId) => {
         try {
             const res = await axiosInstance.put(`/friends/request/${requestId}`, { action: "accept" });
-            const newFriend = res.data.sender._id === useAuthStore.getState().authUser._id
+            const myId = useAuthStore.getState().authUser._id;
+            // the new friend is whichever side of the request isn't me
+            const newFriend = res.data.sender._id.toString() === myId.toString()
                 ? res.data.receiver
                 : res.data.sender;
             set((s) => ({
                 friends: [...s.friends, newFriend],
-                pendingRequests: s.pendingRequests.filter((r) => r._id !== requestId),
+                pendingRequests: s.pendingRequests.filter((r) => r._id.toString() !== requestId.toString()),
             }));
             toast.success(`${newFriend.username} is now your contact`);
         } catch (err) {
@@ -90,7 +91,7 @@ export const useFriendStore = create((set, get) => ({
         try {
             await axiosInstance.put(`/friends/request/${requestId}`, { action: "reject" });
             set((s) => ({
-                pendingRequests: s.pendingRequests.filter((r) => r._id !== requestId),
+                pendingRequests: s.pendingRequests.filter((r) => r._id.toString() !== requestId.toString()),
             }));
         } catch (err) {
             toast.error(err.response?.data?.message || "Could not reject request");
@@ -104,19 +105,34 @@ export const useFriendStore = create((set, get) => ({
 
         socket.off("friendRequest");
         socket.off("friendRequestAccepted");
+        socket.off("friendRequestRejected");
 
+        // Someone sent ME a friend request
         socket.on("friendRequest", (request) => {
             set((s) => ({ pendingRequests: [...s.pendingRequests, request] }));
             toast(`${request.sender.username} sent you a friend request`, { icon: "👋" });
         });
 
+        // MY sent request was accepted
         socket.on("friendRequestAccepted", (request) => {
+            // request.receiver is the person who accepted — that's the new friend for the sender
             const newFriend = request.receiver;
             set((s) => ({
                 friends: [...s.friends, newFriend],
-                sentRequests: s.sentRequests.filter((r) => r._id !== request._id),
+                sentRequests: s.sentRequests.filter(
+                    (r) => r._id.toString() !== request._id.toString()
+                ),
             }));
             toast.success(`${newFriend.username} accepted your request`);
+        });
+
+        // MY sent request was rejected — remove from sentRequests silently
+        socket.on("friendRequestRejected", ({ requestId }) => {
+            set((s) => ({
+                sentRequests: s.sentRequests.filter(
+                    (r) => r._id.toString() !== requestId.toString()
+                ),
+            }));
         });
     },
 
@@ -125,5 +141,6 @@ export const useFriendStore = create((set, get) => ({
         if (!socket) return;
         socket.off("friendRequest");
         socket.off("friendRequestAccepted");
+        socket.off("friendRequestRejected");
     },
 }));

@@ -22,6 +22,8 @@ export const useChatStore = create((set, get) => ({
   isSoundEnabled: localStorage.getItem("isSoundEnabled") === "true",
   // unread DM counts: { [senderId]: count }
   unreadDM: {},
+  // typing indicator: { [userId]: true } — users currently typing to me
+  typingUsers: {},
 
   toggleSound: () => {
     localStorage.setItem("isSoundEnabled", !get().isSoundEnabled);
@@ -156,6 +158,50 @@ export const useChatStore = create((set, get) => ({
       }
     });
   },
+  // Emit typing start/stop to the currently selected user
+  emitTypingStart: () => {
+    const socket = useAuthStore.getState().socket;
+    const { selectedUser } = get();
+    if (!socket || !selectedUser) return;
+    socket.emit("dm_typing_start", selectedUser._id);
+  },
+
+  emitTypingStop: () => {
+    const socket = useAuthStore.getState().socket;
+    const { selectedUser } = get();
+    if (!socket || !selectedUser) return;
+    socket.emit("dm_typing_stop", selectedUser._id);
+  },
+
+  subscribeToTyping: () => {
+    const socket = useAuthStore.getState().socket;
+    if (!socket) return;
+
+    socket.off("dm_typing_start");
+    socket.off("dm_typing_stop");
+
+    socket.on("dm_typing_start", ({ senderId }) => {
+      set((s) => ({ typingUsers: { ...s.typingUsers, [senderId]: true } }));
+    });
+
+    socket.on("dm_typing_stop", ({ senderId }) => {
+      set((s) => {
+        const typingUsers = { ...s.typingUsers };
+        delete typingUsers[senderId];
+        return { typingUsers };
+      });
+    });
+  },
+
+  unsubscribeFromTyping: () => {
+    const socket = useAuthStore.getState().socket;
+    if (!socket) return;
+    socket.off("dm_typing_start");
+    socket.off("dm_typing_stop");
+    // clear all typing state on cleanup
+    set({ typingUsers: {} });
+  },
+
   unsubscribeFromMessages: () => {
     const socket = useAuthStore.getState().socket;
     if (!socket) return;

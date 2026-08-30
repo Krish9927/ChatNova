@@ -126,8 +126,8 @@ export const sendRequest = async (req, res) => {
             .populate("sender", "username profilePic")
             .populate("receiver", "username profilePic");
 
-        // notify receiver via socket
-        const receiverSocket = getReceiverSocketId(receiverId);
+        // notify receiver via socket — getReceiverSocketId is async (Redis lookup)
+        const receiverSocket = await getReceiverSocketId(receiverId);
         if (receiverSocket) {
             io.to(receiverSocket).emit("friendRequest", populated);
         }
@@ -162,8 +162,8 @@ export const respondToRequest = async (req, res) => {
             request.status = "accepted";
             await request.save();
 
-            // notify sender
-            const senderSocket = getReceiverSocketId(request.sender._id.toString());
+            // notify sender their request was accepted
+            const senderSocket = await getReceiverSocketId(request.sender._id.toString());
             if (senderSocket) {
                 io.to(senderSocket).emit("friendRequestAccepted", request);
             }
@@ -174,6 +174,13 @@ export const respondToRequest = async (req, res) => {
         if (action === "reject") {
             request.status = "rejected";
             await request.save();
+
+            // notify sender their request was rejected so their UI updates instantly
+            const senderSocket = await getReceiverSocketId(request.sender._id.toString());
+            if (senderSocket) {
+                io.to(senderSocket).emit("friendRequestRejected", { requestId: request._id });
+            }
+
             return res.status(200).json({ message: "Request rejected" });
         }
 

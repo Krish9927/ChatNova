@@ -144,7 +144,30 @@ io.on("connection", async (socket) => {
     }
   });
 
-  // --- Typing indicators ---
+  // --- Typing indicators (DM) ---
+  // Emit typing_start to a specific user by their userId
+  socket.on("dm_typing_start", async (receiverId) => {
+    if (!receiverId) return;
+    const receiverSocketId = await getReceiverSocketId(receiverId);
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("dm_typing_start", {
+        senderId: socket.userId,
+        senderName: socket.user.username,
+      });
+    }
+  });
+
+  socket.on("dm_typing_stop", async (receiverId) => {
+    if (!receiverId) return;
+    const receiverSocketId = await getReceiverSocketId(receiverId);
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("dm_typing_stop", {
+        senderId: socket.userId,
+      });
+    }
+  });
+
+  // --- Room typing indicators ---
   socket.on("typing_start", (roomId) => {
     if (!roomId) return;
     socket.to(roomId).emit("typing_start", {

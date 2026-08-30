@@ -1,98 +1,113 @@
-/*
- * NEW FILE: translator.js
- * Date: 2025
- * Purpose:
- *  - Provides translateText(text, targetLang) with 3-API fallback chain
- *  - API 1: MyMemory (api.mymemory.translated.net) — most reliable, no key
- *  - API 2: Lingva (lingva.ml) — open source, no key
- *  - API 3: LibreTranslate (libretranslate.de) — last resort, may rate-limit
- *  - Each API has 5s timeout before trying next
- *  - Returns original text if all APIs fail
- *  - Exports LANGUAGES list used by TranslationSelector
- * No npm packages needed — uses native fetch
- */
-
 /**
  * translator.js
- * Tries multiple free public translation APIs in order.
- * If one fails, falls back to the next.
+ * Translation with 2-layer strategy:
  *
- * APIs used (no key required):
- *  1. MyMemory       — https://api.mymemory.translated.net
- *  2. Lingva         — https://lingva.ml
- *  3. LibreTranslate — https://libretranslate.de  (may need key, used as last resort)
+ *  1. Backend proxy  → POST /api/translate  (uses MyMemory server-side, no CORS issues)
+ *  2. Google GTX     → translate.googleapis.com (browser-side, no key, works from browsers)
+ *
+ * The backend proxy is primary because:
+ *  - No CORS issues
+ *  - No browser rate limiting
+ *  - MyMemory works perfectly server-side
+ *
+ * Google GTX is fallback in case backend is down.
  */
 
-const TIMEOUT_MS = 5000;
+const TIMEOUT_MS = 8000;
 
 function withTimeout(promise, ms = TIMEOUT_MS) {
     return Promise.race([
         promise,
         new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("Request timed out")), ms)
+            setTimeout(() => reject(new Error("timeout")), ms)
         ),
     ]);
 }
 
-// API 1 — MyMemory (most reliable, no key needed)
-async function translateMyMemory(text, targetLang) {
-    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=auto|${targetLang}`;
-    const res = await withTimeout(fetch(url));
-    if (!res.ok) throw new Error("MyMemory failed");
-    const data = await res.json();
-    if (data.responseStatus !== 200) throw new Error("MyMemory error");
-    return data.responseData.translatedText;
-}
-
-// API 2 — Lingva
-async function translateLingva(text, targetLang) {
-    const url = `https://lingva.ml/api/v1/auto/${targetLang}/${encodeURIComponent(text)}`;
-    const res = await withTimeout(fetch(url));
-    if (!res.ok) throw new Error("Lingva failed");
-    const data = await res.json();
-    if (!data.translation) throw new Error("Lingva no result");
-    return data.translation;
-}
-
-// API 3 — LibreTranslate (public instance, may rate-limit)
-async function translateLibre(text, targetLang) {
+// ─── API 1: Our backend proxy (MyMemory server-side) ───────────────────────
+async function translateViaBackend(text, targetLang) {
     const res = await withTimeout(
-        fetch("https://libretranslate.de/translate", {
+        fetch("/api/translate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ q: text, source: "auto", target: targetLang, format: "text" }),
+            credentials: "include",          // sends auth cookie
+            body: JSON.stringify({ text, targetLang }),
         })
     );
-    if (!res.ok) throw new Error("LibreTranslate failed");
+
+    if (!res.ok) throw new Error(`Backend proxy HTTP ${res.status}`);
     const data = await res.json();
-    if (!data.translatedText) throw new Error("LibreTranslate no result");
+
+    if (!data.translatedText) throw new Error("Backend proxy empty result");
+
+    // If backend fell back to original text, treat as failure so we try Google
+    if (data.fallback || data.translatedText.trim().toLowerCase() === text.trim().toLowerCase()) {
+        throw new Error("Backend proxy returned original text");
+    }
+
     return data.translatedText;
 }
 
-/**
- * Translate text to targetLang using fallback chain.
- * Returns original text if all APIs fail.
- */
+// ─── API 2: Google Translate GTX (browser-side, no key) ────────────────────
+// Works from browsers — googleapis.com allows browser requests, blocks server curl
+async function translateViaGoogle(text, targetLang) {
+    const params = new URLSearchParams({
+        client: "gtx",
+        sl: "auto",
+        tl: targetLang,
+        dt: "t",
+        q: text,
+    });
+
+    const res = await withTimeout(
+        fetch(`https://translate.googleapis.com/translate_a/single?${params}`)
+    );
+
+    if (!res.ok) throw new Error(`Google GTX HTTP ${res.status}`);
+    const data = await res.json();
+
+    // Response: [ [ ["translated chunk", "original", ...], ... ], null, "detected_lang" ]
+    if (!Array.isArray(data) || !Array.isArray(data[0])) {
+        throw new Error("Google GTX unexpected shape");
+    }
+
+    const translated = data[0]
+        .filter((chunk) => Array.isArray(chunk) && chunk[0])
+        .map((chunk) => chunk[0])
+        .join("");
+
+    if (!translated.trim()) throw new Error("Google GTX empty result");
+    if (translated.trim().toLowerCase() === text.trim().toLowerCase()) {
+        throw new Error("Google GTX returned original text");
+    }
+
+    return translated;
+}
+
+// ─── Main export ────────────────────────────────────────────────────────────
 export async function translateText(text, targetLang) {
     if (!text || !targetLang || targetLang === "default") return text;
 
-    const apis = [translateMyMemory, translateLingva, translateLibre];
-
-    for (const api of apis) {
+    for (const [name, fn] of [
+        ["BackendProxy", translateViaBackend],
+        ["GoogleGTX", translateViaGoogle],
+    ]) {
         try {
-            const result = await api(text, targetLang);
-            if (result && result.trim()) return result;
-        } catch {
-            // try next
+            const result = await fn(text, targetLang);
+            if (result && result.trim()) {
+                console.debug(`[translator] ${name} success for lang=${targetLang}`);
+                return result;
+            }
+        } catch (err) {
+            console.warn(`[translator] ${name} failed:`, err.message);
         }
     }
 
-    // all failed — return original
+    console.warn("[translator] All APIs failed, showing original text");
     return text;
 }
 
-// Flat list (kept for backward compat — built from LANGUAGE_REGIONS below)
-// Region-grouped languages
+// ─── Language lists ──────────────────────────────────────────────────────────
 export const LANGUAGE_REGIONS = [
     {
         region: "South Asia",
@@ -109,24 +124,15 @@ export const LANGUAGE_REGIONS = [
             { code: "pa", label: "Punjabi" },
             { code: "or", label: "Odia" },
             { code: "ur", label: "Urdu" },
-            { code: "as", label: "Assamese" },
             { code: "ne", label: "Nepali" },
             { code: "si", label: "Sinhala" },
-            { code: "sd", label: "Sindhi" },
-            { code: "ks", label: "Kashmiri" },
-            { code: "bho", label: "Bhojpuri" },
-            { code: "mai", label: "Maithili" },
-            { code: "doi", label: "Dogri" },
-            { code: "kok", label: "Konkani" },
-            { code: "mni", label: "Manipuri (Meitei)" },
-            { code: "sat", label: "Santali" },
         ],
     },
     {
         region: "East & Southeast Asia",
         emoji: "🌏",
         languages: [
-            { code: "zh", label: "Chinese (Simplified)" },
+            { code: "zh-CN", label: "Chinese (Simplified)" },
             { code: "zh-TW", label: "Chinese (Traditional)" },
             { code: "ja", label: "Japanese" },
             { code: "ko", label: "Korean" },
@@ -148,16 +154,12 @@ export const LANGUAGE_REGIONS = [
             { code: "ar", label: "Arabic" },
             { code: "fa", label: "Persian (Farsi)" },
             { code: "tr", label: "Turkish" },
-            { code: "ps", label: "Pashto" },
-            { code: "kk", label: "Kazakh" },
-            { code: "uz", label: "Uzbek" },
-            { code: "tk", label: "Turkmen" },
-            { code: "ky", label: "Kyrgyz" },
-            { code: "tg", label: "Tajik" },
-            { code: "az", label: "Azerbaijani" },
             { code: "he", label: "Hebrew" },
             { code: "hy", label: "Armenian" },
             { code: "ka", label: "Georgian" },
+            { code: "kk", label: "Kazakh" },
+            { code: "uz", label: "Uzbek" },
+            { code: "az", label: "Azerbaijani" },
         ],
     },
     {
@@ -194,14 +196,10 @@ export const LANGUAGE_REGIONS = [
             { code: "be", label: "Belarusian" },
             { code: "bs", label: "Bosnian" },
             { code: "ca", label: "Catalan" },
-            { code: "gl", label: "Galician" },
-            { code: "is", label: "Icelandic" },
             { code: "ga", label: "Irish" },
             { code: "mk", label: "Macedonian" },
             { code: "mt", label: "Maltese" },
             { code: "cy", label: "Welsh" },
-            { code: "eu", label: "Basque" },
-            { code: "lb", label: "Luxembourgish" },
         ],
     },
     {
@@ -216,10 +214,6 @@ export const LANGUAGE_REGIONS = [
             { code: "zu", label: "Zulu" },
             { code: "af", label: "Afrikaans" },
             { code: "so", label: "Somali" },
-            { code: "rw", label: "Kinyarwanda" },
-            { code: "sn", label: "Shona" },
-            { code: "st", label: "Sesotho" },
-            { code: "xh", label: "Xhosa" },
         ],
     },
     {
@@ -243,7 +237,7 @@ export const LANGUAGE_REGIONS = [
     },
 ];
 
-// Flat list built from regions (for backward compat)
+// Flat list (deduped) — used by TranslationSelector
 export const LANGUAGES = [
     { code: "default", label: "Default (No Translation)" },
     ...LANGUAGE_REGIONS.flatMap((r) => r.languages).filter(

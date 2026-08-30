@@ -1,0 +1,114 @@
+# docker-compose.yml
+# Orchestrates 3 services: app (Node.js) + postgres + redis
+# Run the entire stack with: docker compose up --build
+# Stop everything with: docker compose down
+
+version: '3.9'
+
+services:
+
+  # ─────────────────────────────────────────────
+  # SERVICE 1: PostgreSQL Database
+  # ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine          # Official Postgres image, Alpine variant for small size
+    container_name: chatnova_postgres
+    restart: unless-stopped            # Auto-restart if it crashes, but not if manually stopped
+
+    environment:
+      POSTGRES_USER: postgres          # Database superuser username
+      POSTGRES_PASSWORD: postgres      # Database superuser password
+      POSTGRES_DB: chatnova_db         # Auto-creates this database on first boot
+
+    ports:
+      - "5432:5432"                    # Maps host port 5432 → container port 5432
+                                       # Lets you connect with TablePlus/pgAdmin from your laptop
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data   # Persists database files to named volume
+                                                  # Data survives 'docker compose down'
+
+    healthcheck:
+      # pg_isready: Official Postgres health check utility
+      # Returns exit code 0 only when Postgres is accepting connections
+      test: ["CMD-SHELL", "pg_isready -U postgres -d chatnova_db"]
+      interval: 10s      # Run check every 10 seconds
+      timeout: 5s        # Fail if no response within 5 seconds
+      retries: 5         # Mark as unhealthy after 5 consecutive failures
+      start_period: 10s  # Grace period on first boot before checks begin
+
+
+  # ─────────────────────────────────────────────
+  # SERVICE 2: Redis Cache & Message Broker
+  # ─────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine              # Official Redis image, Alpine variant
+    container_name: chatnova_redis
+    restart: unless-stopped
+
+    ports:
+      - "6379:6379"                    # Maps host port 6379 → container port 6379
+
+    volumes:
+      - redis_data:/data               # Persists Redis RDB snapshots to named volume
+                                       # Online presence keys survive restarts (within TTL)
+
+    healthcheck:
+      # redis-cli ping: Returns PONG if Redis is alive
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+
+  # ─────────────────────────────────────────────
+  # SERVICE 3: Node.js Chat Application
+  # ─────────────────────────────────────────────
+  app:
+    build:
+      context: ./backend               # Build from the /backend directory
+      dockerfile: Dockerfile           # Uses our multi-stage Dockerfile
+    container_name: chatnova_app
+    restart: unless-stopped
+
+    ports:
+      - "3000:3000"                    # Maps host port 3000 → container port 3000
+
+    env_file:
+      - ./backend/.env                 # Tells Docker where to find your secrets!
+
+    environment:
+      # These specific variables OVERRIDE what is in your .env file
+      # All other variables (MONGO_URI, JWT_SECRET, etc) are automatically loaded by env_file above
+      NODE_ENV: production
+      PORT: 3000
+
+      # PostgreSQL: Points to the 'postgres' service container by its internal DNS name
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/chatnova_db
+
+      # Redis: Points to the 'redis' service container by its internal DNS name
+      REDIS_URL: redis://redis:6379
+
+      # Disable SSL for local Postgres container (it doesn't support SSL)
+      POSTGRES_SSL: "false"
+
+    depends_on:
+      # 'depends_on' with condition ensures app only starts AFTER
+      # postgres and redis pass their healthchecks
+      # Without this, app container starts immediately, fails to connect, and crashes
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+
+# ─────────────────────────────────────────────
+# NAMED VOLUMES
+# ─────────────────────────────────────────────
+# Named volumes are managed by Docker and persist across container restarts
+# 'docker compose down' preserves them
+# 'docker compose down -v' deletes them (wipes all data — be careful!)
+volumes:
+  postgres_data:
+  redis_data:

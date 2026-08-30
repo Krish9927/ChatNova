@@ -49,8 +49,8 @@ function ContactList() {
             key={id}
             onClick={() => { setTab(id); if (id !== "find") clearSearch(); }}
             className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${tab === id
-                ? "bg-cyan-500/15 text-cyan-400 border border-cyan-500/25"
-                : "text-slate-500 hover:text-slate-300 hover:bg-white/5"
+              ? "bg-cyan-500/15 text-cyan-400 border border-cyan-500/25"
+              : "text-slate-500 hover:text-slate-300 hover:bg-white/5"
               }`}
           >
             {label}
@@ -162,7 +162,7 @@ function ContactList() {
               <p className="text-center text-slate-600 text-sm py-8">No users found</p>
             )}
             {searchResults.map((user) => {
-              const alreadySent = sentRequests.some((r) => r.receiver._id === user._id);
+              const alreadySent = sentRequests.some((r) => r.receiver._id?.toString() === user._id?.toString());
               return (
                 <div key={user._id} className="flex items-center gap-3 px-3 py-3 rounded-xl bg-white/3 border border-white/5">
                   <img src={user.profilePic || "/avatar.png"} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
@@ -174,8 +174,8 @@ function ContactList() {
                     onClick={() => !alreadySent && sendRequest(user._id)}
                     disabled={alreadySent}
                     className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${alreadySent
-                        ? "bg-slate-700/50 text-slate-500 cursor-default"
-                        : "bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/25 border border-cyan-500/20"
+                      ? "bg-slate-700/50 text-slate-500 cursor-default"
+                      : "bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/25 border border-cyan-500/20"
                       }`}
                   >
                     {alreadySent ? (

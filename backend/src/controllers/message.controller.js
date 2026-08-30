@@ -1,29 +1,42 @@
 /*
  * CHANGED: message.controller.js
- * Date: 2025
- * Changes:
- *  - Added import for io and getReceiverSocketId from socket.js
- *  - Fixed emit event name: "receiveMessage" → "newMessage" to match frontend listener
- *  - Added sender socket emit so sender's other tabs/devices update in real-time
+ * Migrated DM message storage from MongoDB → PostgreSQL (dm_messages table)
+ * MongoDB Message model is no longer written to.
+ * All reads/writes now go through the shared pg pool.
  */
-import Message from "../models/Message.js";
+import pool from "../lib/pg.js";
 import User from "../models/User.js";
-import FriendRequest from "../models/FriendRequest.js";
 import cloudinary from "../lib/cloudinary.js";
 import { io, getReceiverSocketId } from "../lib/socket.js";
 import streamifier from "streamifier";
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
+// Map a PostgreSQL row to the shape the frontend expects
+// (matches the old Mongoose document shape so no frontend changes needed)
+function rowToMessage(row) {
+  return {
+    _id: row.id,
+    senderId: row.sender_id,
+    receiverId: row.receiver_id,
+    groupId: row.group_id,
+    text: row.text,
+    image: row.image,
+    audio: row.audio,
+    sticker: row.sticker,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
 
-
+// ── Controllers ───────────────────────────────────────────────────────────────
 
 export const getAllContacts = async (req, res) => {
   try {
     const loggedUserId = req.user._id;
     const filteredUsers = await User.find({ _id: { $ne: loggedUserId } }).select("-password");
     res.status(200).json(filteredUsers);
-  }
-  catch (err) {
+  } catch (err) {
     console.error("Error fetching contacts:", err);
     res.status(500).json({ message: "Internal server error" });
   }
@@ -31,19 +44,20 @@ export const getAllContacts = async (req, res) => {
 
 export const getMessagesByUserId = async (req, res) => {
   try {
-    const myId = req.user._id;
-    const { id: userToChatId } = req.params;
+    const myId = req.user._id.toString();
+    const otherId = req.params.id;
 
-    const messages = await Message.find({
-      $or: [
-        { senderId: myId, receiverId: userToChatId },
-        { senderId: userToChatId, receiverId: myId },
-      ],
-    });
+    const { rows } = await pool.query(
+      `SELECT * FROM dm_messages
+       WHERE (sender_id = $1 AND receiver_id = $2)
+          OR (sender_id = $2 AND receiver_id = $1)
+       ORDER BY created_at ASC`,
+      [myId, otherId]
+    );
 
-    res.status(200).json(messages);
+    res.status(200).json(rows.map(rowToMessage));
   } catch (error) {
-    console.log("Error in getMessages controller: ", error.message);
+    console.error("Error in getMessagesByUserId:", error.message);
     res.status(500).json({ error: "Internal server error" });
   }
 };
@@ -52,21 +66,18 @@ export const sendMessage = async (req, res) => {
   try {
     const { text, image, sticker, receiverId: receiverFromBody } = req.body;
     const receiverId = req.params.id || receiverFromBody;
-    const senderId = req.user._id;
+    const senderId = req.user._id.toString();
 
     if (!receiverId) {
-      return res.status(400).json({
-        message:
-          "Receiver id is required. Use POST /api/messages/send/:receiverId or send receiverId in the body.",
-      });
+      return res.status(400).json({ message: "Receiver id is required." });
     }
-
     if (!text && !image && !sticker) {
       return res.status(400).json({ message: "Text, image, or sticker is required." });
     }
-    if (senderId.equals(receiverId)) {
+    if (senderId === receiverId.toString()) {
       return res.status(400).json({ message: "Cannot send messages to yourself." });
     }
+
     const receiverExists = await User.exists({ _id: receiverId });
     if (!receiverExists) {
       return res.status(404).json({ message: "Receiver not found." });
@@ -78,66 +89,60 @@ export const sendMessage = async (req, res) => {
       imageUrl = uploadResponse.secure_url;
     }
 
-    const newMessage = new Message({
-      senderId,
-      receiverId,
-      text,
-      image: imageUrl,
-      sticker: sticker || undefined,
-    });
+    const { rows } = await pool.query(
+      `INSERT INTO dm_messages (sender_id, receiver_id, text, image, sticker)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [senderId, receiverId, text || null, imageUrl || null, sticker || null]
+    );
 
-    await newMessage.save();
+    const newMessage = rowToMessage(rows[0]);
 
-    const receiverSocketId = getReceiverSocketId(receiverId);
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit("newMessage", newMessage);
-    }
+    const [receiverSocketId, senderSocketId] = await Promise.all([
+      getReceiverSocketId(receiverId),
+      getReceiverSocketId(senderId),
+    ]);
 
-    // also emit to sender so their other open tabs/devices update
-    const senderSocketId = getReceiverSocketId(senderId);
-    if (senderSocketId) {
-      io.to(senderSocketId).emit("newMessage", newMessage);
-    }
+    if (receiverSocketId) io.to(receiverSocketId).emit("newMessage", newMessage);
+    if (senderSocketId) io.to(senderSocketId).emit("newMessage", newMessage);
 
     res.status(201).json(newMessage);
   } catch (error) {
-    console.log("Error in sendMessage controller: ", error.message);
+    console.error("Error in sendMessage:", error.message);
     res.status(500).json({ error: "Internal server error" });
   }
 };
 
 export const getChatPartners = async (req, res) => {
   try {
-    const loggedInUserId = req.user._id;
+    const loggedInUserId = req.user._id.toString();
 
-    // only DM messages (receiverId is set, groupId is null)
-    const messages = await Message.find({
-      groupId: null,
-      $or: [{ senderId: loggedInUserId }, { receiverId: loggedInUserId }],
-    });
+    // Get all distinct users this person has DMed or received DMs from
+    const { rows } = await pool.query(
+      `SELECT DISTINCT
+         CASE
+           WHEN sender_id = $1 THEN receiver_id
+           ELSE sender_id
+         END AS partner_id
+       FROM dm_messages
+       WHERE receiver_id IS NOT NULL
+         AND group_id IS NULL
+         AND (sender_id = $1 OR receiver_id = $1)`,
+      [loggedInUserId]
+    );
 
-    const chatPartnerIds = [
-      ...new Set(
-        messages
-          .filter((msg) => msg.receiverId != null) // guard: skip any null receiverId
-          .map((msg) =>
-            msg.senderId.toString() === loggedInUserId.toString()
-              ? msg.receiverId.toString()
-              : msg.senderId.toString()
-          )
-      ),
-    ];
-
-    const chatPartners = await User.find({ _id: { $in: chatPartnerIds } }).select("-password");
+    const partnerIds = rows.map((r) => r.partner_id);
+    const chatPartners = await User.find({ _id: { $in: partnerIds } }).select("-password");
 
     res.status(200).json(chatPartners);
   } catch (error) {
-    console.error("Error in getChatPartners: ", error.message);
+    console.error("Error in getChatPartners:", error.message);
     res.status(500).json({ error: "Internal server error" });
   }
 };
 
-// Stream-upload audio blob to Cloudinary, save message, emit via socket
+// ── Audio messages ────────────────────────────────────────────────────────────
+
 function streamUploadToCloudinary(buffer) {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
@@ -158,14 +163,15 @@ export const sendAudioMessage = async (req, res) => {
     }
 
     const receiverId = req.params.id || req.body.receiverId;
-    const senderId = req.user._id;
+    const senderId = req.user._id.toString();
 
     if (!receiverId) {
       return res.status(400).json({ message: "Receiver id is required." });
     }
-    if (senderId.toString() === receiverId) {
+    if (senderId === receiverId.toString()) {
       return res.status(400).json({ message: "Cannot send messages to yourself." });
     }
+
     const receiverExists = await User.exists({ _id: receiverId });
     if (!receiverExists) {
       return res.status(404).json({ message: "Receiver not found." });
@@ -173,17 +179,21 @@ export const sendAudioMessage = async (req, res) => {
 
     const result = await streamUploadToCloudinary(req.file.buffer);
 
-    const newMessage = new Message({
-      senderId,
-      receiverId,
-      audio: result.secure_url,
-    });
-    await newMessage.save();
+    const { rows } = await pool.query(
+      `INSERT INTO dm_messages (sender_id, receiver_id, audio)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [senderId, receiverId, result.secure_url]
+    );
 
-    const receiverSocketId = getReceiverSocketId(receiverId);
+    const newMessage = rowToMessage(rows[0]);
+
+    const [receiverSocketId, senderSocketId] = await Promise.all([
+      getReceiverSocketId(receiverId),
+      getReceiverSocketId(senderId),
+    ]);
+
     if (receiverSocketId) io.to(receiverSocketId).emit("newMessage", newMessage);
-
-    const senderSocketId = getReceiverSocketId(senderId);
     if (senderSocketId) io.to(senderSocketId).emit("newMessage", newMessage);
 
     res.status(201).json(newMessage);

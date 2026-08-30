@@ -12,9 +12,11 @@ function ChatContainer() {
   const {
     selectedUser, getMessagesByUserId, messages,
     isMessagesLoading, subscribeToMessages, unsubscribeFromMessages,
+    subscribeToTyping, unsubscribeFromTyping, typingUsers,
   } = useChatStore();
   const { authUser } = useAuthStore();
-  const { getLang, translateMessages, getTranslated, isTranslating } = useTranslationStore();
+  // Subscribe to cache so component re-renders when translations finish
+  const { getLang, getTranslated, isTranslating, cache } = useTranslationStore();
   const messagesContainerRef = useRef(null);
   const isInitialLoad = useRef(true);
 
@@ -31,14 +33,21 @@ function ChatContainer() {
     if (!selectedUser) return;
     getMessagesByUserId(selectedUser._id);
     subscribeToMessages();
-    return () => unsubscribeFromMessages();
-  }, [selectedUser, getMessagesByUserId, subscribeToMessages, unsubscribeFromMessages]);
+    subscribeToTyping();
+    return () => {
+      unsubscribeFromMessages();
+      unsubscribeFromTyping();
+    };
+  }, [selectedUser, getMessagesByUserId, subscribeToMessages, unsubscribeFromMessages, subscribeToTyping, unsubscribeFromTyping]);
 
   useEffect(() => {
     if (targetLang !== "default" && messages.length > 0) {
-      translateMessages(messages, targetLang);
+      // use getState() to avoid stale closure and prevent infinite loop
+      // (translateMessages from store would change reference on every render)
+      useTranslationStore.getState().translateMessages(messages, targetLang);
     }
-  }, [targetLang, messages, translateMessages]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetLang, messages]);
 
   useEffect(() => {
     isInitialLoad.current = true;
@@ -133,6 +142,18 @@ function ChatContainer() {
       </div>
 
       {/* Input always at bottom, outside the bg div */}
+      {typingUsers[selectedUser?._id] && (
+        <div className="px-6 py-1.5 bg-[#111827]/80 border-t border-white/5 flex items-center gap-2">
+          <div className="flex gap-1 items-center">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:0ms]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:150ms]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:300ms]" />
+          </div>
+          <span className="text-xs text-slate-400 italic">
+            {selectedUser?.fullName || selectedUser?.username} is typing…
+          </span>
+        </div>
+      )}
       <MessageInput />
     </div>
   );

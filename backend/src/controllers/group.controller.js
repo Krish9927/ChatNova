@@ -1,9 +1,31 @@
+/*
+ * CHANGED: group.controller.js
+ * - Migrated group message storage from MongoDB → PostgreSQL (dm_messages table)
+ * - Fixed all getReceiverSocketId() calls — now properly awaited (was returning Promise)
+ * - Group metadata (Group model) stays in MongoDB — document storage is correct for that
+ */
 import Group from "../models/Group.js";
-import Message from "../models/Message.js";
+import pool from "../lib/pg.js";
 import cloudinary from "../lib/cloudinary.js";
 import { io, getReceiverSocketId } from "../lib/socket.js";
 
-// ── Create group ─────────────────────────────────────────────────────────────
+// Map PostgreSQL row → frontend-expected shape
+// Mimics the old Mongoose populated shape so no frontend changes needed
+function rowToGroupMessage(row, senderUser = null) {
+    return {
+        _id: row.id,
+        senderId: senderUser || { _id: row.sender_id },
+        groupId: row.group_id,
+        text: row.text,
+        image: row.image,
+        audio: row.audio,
+        sticker: row.sticker,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+    };
+}
+
+// ── Create group ──────────────────────────────────────────────────────────────
 export const createGroup = async (req, res) => {
     try {
         const { name, description, memberIds } = req.body;
@@ -11,7 +33,6 @@ export const createGroup = async (req, res) => {
 
         if (!name?.trim()) return res.status(400).json({ message: "Group name is required" });
 
-        // always include admin in members
         const uniqueMembers = [...new Set([adminId.toString(), ...(memberIds || [])])];
 
         const group = new Group({
@@ -26,11 +47,13 @@ export const createGroup = async (req, res) => {
             .populate("members", "-password")
             .populate("admin", "-password");
 
-        // notify all members via socket
-        uniqueMembers.forEach((memberId) => {
-            const socketId = getReceiverSocketId(memberId);
-            if (socketId) io.to(socketId).emit("groupCreated", populated);
-        });
+        // notify all members via socket (await the async Redis lookup)
+        await Promise.all(
+            uniqueMembers.map(async (memberId) => {
+                const socketId = await getReceiverSocketId(memberId);
+                if (socketId) io.to(socketId).emit("groupCreated", populated);
+            })
+        );
 
         res.status(201).json(populated);
     } catch (err) {
@@ -77,7 +100,7 @@ export const updateGroup = async (req, res) => {
         if (group.admin.toString() !== req.user._id.toString())
             return res.status(403).json({ message: "Only admin can update group" });
 
-        const {name, description, avatar } = req.body;
+        const { name, description, avatar } = req.body;
         if (name) group.name = name.trim();
         if (description !== undefined) group.description = description.trim();
         if (avatar) {
@@ -90,11 +113,12 @@ export const updateGroup = async (req, res) => {
             .populate("members", "-password")
             .populate("admin", "-password");
 
-        // notify all members
-        group.members.forEach((memberId) => {
-            const socketId = getReceiverSocketId(memberId.toString());
-            if (socketId) io.to(socketId).emit("groupUpdated", populated);
-        });
+        await Promise.all(
+            group.members.map(async (memberId) => {
+                const socketId = await getReceiverSocketId(memberId.toString());
+                if (socketId) io.to(socketId).emit("groupUpdated", populated);
+            })
+        );
 
         res.status(200).json(populated);
     } catch (err) {
@@ -123,10 +147,12 @@ export const addMembers = async (req, res) => {
             .populate("members", "-password")
             .populate("admin", "-password");
 
-        group.members.forEach((memberId) => {
-            const socketId = getReceiverSocketId(memberId.toString());
-            if (socketId) io.to(socketId).emit("groupUpdated", populated);
-        });
+        await Promise.all(
+            group.members.map(async (memberId) => {
+                const socketId = await getReceiverSocketId(memberId.toString());
+                if (socketId) io.to(socketId).emit("groupUpdated", populated);
+            })
+        );
 
         res.status(200).json(populated);
     } catch (err) {
@@ -149,26 +175,24 @@ export const removeMember = async (req, res) => {
 
         group.members = group.members.filter((m) => m.toString() !== memberId);
 
-        // if admin leaves, assign new admin
         if (isAdmin && isSelf && group.members.length > 0) {
             group.admin = group.members[0];
         }
-
         await group.save();
 
         const populated = await Group.findById(group._id)
             .populate("members", "-password")
             .populate("admin", "-password");
 
-        // notify removed member
-        const removedSocket = getReceiverSocketId(memberId);
+        const [removedSocket] = await Promise.all([getReceiverSocketId(memberId)]);
         if (removedSocket) io.to(removedSocket).emit("removedFromGroup", { groupId: group._id });
 
-        // notify remaining members
-        group.members.forEach((m) => {
-            const socketId = getReceiverSocketId(m.toString());
-            if (socketId) io.to(socketId).emit("groupUpdated", populated);
-        });
+        await Promise.all(
+            group.members.map(async (m) => {
+                const socketId = await getReceiverSocketId(m.toString());
+                if (socketId) io.to(socketId).emit("groupUpdated", populated);
+            })
+        );
 
         res.status(200).json(populated);
     } catch (err) {
@@ -184,13 +208,15 @@ export const deleteGroup = async (req, res) => {
         if (group.admin.toString() !== req.user._id.toString())
             return res.status(403).json({ message: "Only admin can delete group" });
 
-        // notify all members before deleting
-        group.members.forEach((memberId) => {
-            const socketId = getReceiverSocketId(memberId.toString());
-            if (socketId) io.to(socketId).emit("groupDeleted", { groupId: group._id });
-        });
+        await Promise.all(
+            group.members.map(async (memberId) => {
+                const socketId = await getReceiverSocketId(memberId.toString());
+                if (socketId) io.to(socketId).emit("groupDeleted", { groupId: group._id });
+            })
+        );
 
-        await Message.deleteMany({ groupId: group._id });
+        // delete group messages from PostgreSQL
+        await pool.query(`DELETE FROM dm_messages WHERE group_id = $1`, [group._id.toString()]);
         await Group.findByIdAndDelete(group._id);
 
         res.status(200).json({ message: "Group deleted" });
@@ -208,11 +234,18 @@ export const getGroupMessages = async (req, res) => {
         const isMember = group.members.some((m) => m.toString() === req.user._id.toString());
         if (!isMember) return res.status(403).json({ message: "Not a member" });
 
-        const messages = await Message.find({ groupId: req.params.id })
-            .populate("senderId", "username profilePic")
-            .sort({ createdAt: 1 });
+        const { rows } = await pool.query(
+            `SELECT * FROM dm_messages WHERE group_id = $1 ORDER BY created_at ASC`,
+            [req.params.id]
+        );
 
-        res.status(200).json(messages);
+        // Fetch sender profiles from MongoDB for the populated shape
+        const User = (await import("../models/User.js")).default;
+        const senderIds = [...new Set(rows.map((r) => r.sender_id))];
+        const senders = await User.find({ _id: { $in: senderIds } }).select("username profilePic");
+        const senderMap = Object.fromEntries(senders.map((s) => [s._id.toString(), s]));
+
+        res.status(200).json(rows.map((r) => rowToGroupMessage(r, senderMap[r.sender_id])));
     } catch (err) {
         res.status(500).json({ message: "Internal server error" });
     }
@@ -223,15 +256,16 @@ export const sendGroupMessage = async (req, res) => {
     try {
         const { text, image, sticker } = req.body;
         const groupId = req.params.id;
-        const senderId = req.user._id;
+        const senderId = req.user._id.toString();
 
         const group = await Group.findById(groupId);
         if (!group) return res.status(404).json({ message: "Group not found" });
 
-        const isMember = group.members.some((m) => m.toString() === senderId.toString());
+        const isMember = group.members.some((m) => m.toString() === senderId);
         if (!isMember) return res.status(403).json({ message: "Not a member" });
 
-        if (!text && !image && !sticker) return res.status(400).json({ message: "Text, image, or sticker required" });
+        if (!text && !image && !sticker)
+            return res.status(400).json({ message: "Text, image, or sticker required" });
 
         let imageUrl;
         if (image) {
@@ -239,18 +273,27 @@ export const sendGroupMessage = async (req, res) => {
             imageUrl = upload.secure_url;
         }
 
-        const newMessage = new Message({ senderId, groupId, text, image: imageUrl, sticker: sticker || undefined });
-        await newMessage.save();
+        const { rows } = await pool.query(
+            `INSERT INTO dm_messages (sender_id, group_id, text, image, sticker)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING *`,
+            [senderId, groupId, text || null, imageUrl || null, sticker || null]
+        );
 
-        const populated = await Message.findById(newMessage._id)
-            .populate("senderId", "username profilePic");
+        // Fetch sender profile for populated shape
+        const User = (await import("../models/User.js")).default;
+        const sender = await User.findById(senderId).select("username profilePic");
+        const populated = rowToGroupMessage(rows[0], sender);
 
-        // emit only to OTHER members — sender already has it via REST response
-        group.members.forEach((memberId) => {
-            if (memberId.toString() === senderId.toString()) return;
-            const socketId = getReceiverSocketId(memberId.toString());
-            if (socketId) io.to(socketId).emit("newGroupMessage", populated);
-        });
+        // emit to all OTHER members
+        await Promise.all(
+            group.members
+                .filter((m) => m.toString() !== senderId)
+                .map(async (memberId) => {
+                    const socketId = await getReceiverSocketId(memberId.toString());
+                    if (socketId) io.to(socketId).emit("newGroupMessage", populated);
+                })
+        );
 
         res.status(201).json(populated);
     } catch (err) {
@@ -265,12 +308,12 @@ export const sendGroupAudioMessage = async (req, res) => {
         if (!req.file) return res.status(400).json({ message: "Audio file required" });
 
         const groupId = req.params.id;
-        const senderId = req.user._id;
+        const senderId = req.user._id.toString();
 
         const group = await Group.findById(groupId);
         if (!group) return res.status(404).json({ message: "Group not found" });
 
-        const isMember = group.members.some((m) => m.toString() === senderId.toString());
+        const isMember = group.members.some((m) => m.toString() === senderId);
         if (!isMember) return res.status(403).json({ message: "Not a member" });
 
         const { default: streamifier } = await import("streamifier");
@@ -282,18 +325,25 @@ export const sendGroupAudioMessage = async (req, res) => {
             streamifier.createReadStream(req.file.buffer).pipe(stream);
         });
 
-        const newMessage = new Message({ senderId, groupId, audio: audioUrl });
-        await newMessage.save();
+        const { rows } = await pool.query(
+            `INSERT INTO dm_messages (sender_id, group_id, audio)
+             VALUES ($1, $2, $3)
+             RETURNING *`,
+            [senderId, groupId, audioUrl]
+        );
 
-        const populated = await Message.findById(newMessage._id)
-            .populate("senderId", "username profilePic");
+        const User = (await import("../models/User.js")).default;
+        const sender = await User.findById(senderId).select("username profilePic");
+        const populated = rowToGroupMessage(rows[0], sender);
 
-        // emit only to OTHER members — sender already has it via REST response
-        group.members.forEach((memberId) => {
-            if (memberId.toString() === senderId.toString()) return;
-            const socketId = getReceiverSocketId(memberId.toString());
-            if (socketId) io.to(socketId).emit("newGroupMessage", populated);
-        });
+        await Promise.all(
+            group.members
+                .filter((m) => m.toString() !== senderId)
+                .map(async (memberId) => {
+                    const socketId = await getReceiverSocketId(memberId.toString());
+                    if (socketId) io.to(socketId).emit("newGroupMessage", populated);
+                })
+        );
 
         res.status(201).json(populated);
     } catch (err) {

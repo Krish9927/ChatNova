@@ -23,12 +23,9 @@ function ChatPage() {
   useEffect(() => {
     subscribeToGroupEvents();
     subscribeToFriendEvents();
-    const { subscribeToMessages, unsubscribeFromMessages } = useChatStore.getState();
-    subscribeToMessages();
     return () => {
       unsubscribeFromGroupEvents();
       unsubscribeFromFriendEvents();
-      unsubscribeFromMessages();
     };
   }, []);
 

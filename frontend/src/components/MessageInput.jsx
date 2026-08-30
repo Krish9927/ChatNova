@@ -17,11 +17,20 @@ function MessageInput() {
 
   const fileInputRef = useRef(null);
   const sttRef = useRef(null);
-  const { sendMessage, isSoundEnabled } = useChatStore();
+  const typingTimeoutRef = useRef(null);
+  const isTypingRef = useRef(false);
+
+  const { sendMessage, isSoundEnabled, emitTypingStart, emitTypingStop } = useChatStore();
 
   const handleSend = (e) => {
     e.preventDefault();
     if (!text.trim() && !imagePreview) return;
+    // stop typing indicator when message is sent
+    if (isTypingRef.current) {
+      isTypingRef.current = false;
+      clearTimeout(typingTimeoutRef.current);
+      emitTypingStop();
+    }
     if (isSoundEnabled) playRandomKeyStrokeSound();
     sendMessage({ text: text.trim(), image: imagePreview });
     setText("");
@@ -117,7 +126,19 @@ function MessageInput() {
             value={text}
             onChange={(e) => {
               setText(e.target.value);
-              isSoundEnabled && playRandomKeyStrokeSound();
+              if (isSoundEnabled) playRandomKeyStrokeSound();
+
+              // emit typing_start on first keystroke
+              if (!isTypingRef.current) {
+                isTypingRef.current = true;
+                emitTypingStart();
+              }
+              // reset the stop timer on every keystroke
+              clearTimeout(typingTimeoutRef.current);
+              typingTimeoutRef.current = setTimeout(() => {
+                isTypingRef.current = false;
+                emitTypingStop();
+              }, 2000);
             }}
             placeholder={isTranscribing ? "Listening..." : "Type a message..."}
             className={`flex-1 bg-transparent text-sm outline-none placeholder-slate-500 ${isTranscribing ? "text-cyan-300" : "text-slate-100"
@@ -141,8 +162,8 @@ function MessageInput() {
             type="button"
             onClick={() => setShowStickers((v) => !v)}
             className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${showStickers
-                ? "bg-cyan-500/20 text-cyan-400"
-                : "bg-white/5 text-slate-400 hover:text-slate-200 hover:bg-white/8"
+              ? "bg-cyan-500/20 text-cyan-400"
+              : "bg-white/5 text-slate-400 hover:text-slate-200 hover:bg-white/8"
               }`}
             title="Stickers"
           >
