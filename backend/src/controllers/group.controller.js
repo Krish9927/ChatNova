@@ -8,6 +8,7 @@ import Group from "../models/Group.js";
 import pool from "../lib/pg.js";
 import cloudinary from "../lib/cloudinary.js";
 import { io, getReceiverSocketId } from "../lib/socket.js";
+import { sendMessageEmailIfNeeded } from "../lib/notificationHelper.js";
 
 // Map PostgreSQL row → frontend-expected shape
 // Mimics the old Mongoose populated shape so no frontend changes needed
@@ -291,7 +292,16 @@ export const sendGroupMessage = async (req, res) => {
                 .filter((m) => m.toString() !== senderId)
                 .map(async (memberId) => {
                     const socketId = await getReceiverSocketId(memberId.toString());
-                    if (socketId) io.to(socketId).emit("newGroupMessage", populated);
+                    if (socketId) {
+                        io.to(socketId).emit("newGroupMessage", populated);
+                    } else {
+                        // Recipient is offline, trigger email notification check (fire-and-forget)
+                        sendMessageEmailIfNeeded(
+                            memberId.toString(),
+                            senderId,
+                            `[Group: ${group.name}] ${text || "📷 Image"}`
+                        ).catch(() => {});
+                    }
                 })
         );
 
@@ -341,7 +351,16 @@ export const sendGroupAudioMessage = async (req, res) => {
                 .filter((m) => m.toString() !== senderId)
                 .map(async (memberId) => {
                     const socketId = await getReceiverSocketId(memberId.toString());
-                    if (socketId) io.to(socketId).emit("newGroupMessage", populated);
+                    if (socketId) {
+                        io.to(socketId).emit("newGroupMessage", populated);
+                    } else {
+                        // Recipient is offline, trigger email notification check (fire-and-forget)
+                        sendMessageEmailIfNeeded(
+                            memberId.toString(),
+                            senderId,
+                            `[Group: ${group.name}] 🎵 Audio message`
+                        ).catch(() => {});
+                    }
                 })
         );
 

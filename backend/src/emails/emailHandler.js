@@ -4,7 +4,12 @@
  * Requires GMAIL_USER and GMAIL_APP_PASSWORD in .env
  */
 import { transporter, MAIL_FROM } from "../lib/nodemailer.js";
-import { createWelcomeEmailTemplate, createOtpEmailTemplate } from "./emailTemplates.js";
+import {
+  createWelcomeEmailTemplate,
+  createOtpEmailTemplate,
+  createNewMessageEmailTemplate,
+  createFriendRequestEmailTemplate,
+} from "./emailTemplates.js";
 import { ENV } from "../lib/env.js";
 
 async function sendEmail({ to, subject, html }) {
@@ -22,7 +27,7 @@ export const sendWelcomeEmail = async (email, name) => {
   await sendEmail({
     to: email,
     subject: "Welcome to ChatNova!",
-    html: createWelcomeEmailTemplate(name, ENV.CLIENT_URL),
+    html: createWelcomeEmailTemplate(name, ENV.APP_URL),
   });
 };
 
@@ -35,5 +40,21 @@ export const sendOtpEmail = async (email, name, otp, purpose) => {
     to: email,
     subject,
     html: createOtpEmailTemplate(name, otp, purpose),
+  });
+};
+
+export const sendNewMessageNotification = async (email, recipientName, senderName, messagePreview) => {
+  await sendEmail({
+    to: email,
+    subject: `💬 New message from ${senderName} — ChatNova`,
+    html: createNewMessageEmailTemplate(recipientName, senderName, messagePreview, ENV.APP_URL),
+  });
+};
+
+export const sendFriendRequestNotification = async (email, recipientName, senderName) => {
+  await sendEmail({
+    to: email,
+    subject: `👋 ${senderName} sent you a friend request — ChatNova`,
+    html: createFriendRequestEmailTemplate(recipientName, senderName, ENV.APP_URL),
   });
 }; 

@@ -14,6 +14,9 @@ const userSchema = new mongoose.Schema({
     // password reset
     resetOtp: { type: String },
     resetOtpExpiry: { type: Date },
+
+    // email notification preference (opt-out)
+    emailNotifications: { type: Boolean, default: true },
 }, { timestamps: true });
 
 const User = mongoose.model("User", userSchema);

@@ -33,6 +33,7 @@ router.get("/check-auth", protectedRoute, (req, res) => {
         email: u.email,
         profilePic: u.profilePic,
         isVerified: u.isVerified,
+        emailNotifications: u.emailNotifications,
     });
 });
 

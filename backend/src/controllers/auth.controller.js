@@ -98,6 +98,7 @@ export const verifyEmailOtp = async (req, res) => {
             email: user.email,
             profilePic: user.profilePic,
             isVerified: true,
+            emailNotifications: user.emailNotifications,
         });
     } catch (error) {
         console.error("Error in verifyEmailOtp:", error);
@@ -236,6 +237,7 @@ export const login = async (req, res) => {
             email: user.email,
             profilePic: user.profilePic,
             isVerified: user.isVerified,
+            emailNotifications: user.emailNotifications,
         });
     } catch (error) {
         console.error("Error in login:", error);
@@ -251,18 +253,28 @@ export const logout = (_, res) => {
 
 // ─── UPDATE PROFILE ───────────────────────────────────────────────────────────
 export const updateProfile = async (req, res) => {
-    const { profilePic } = req.body;
+    const { profilePic, emailNotifications } = req.body;
     try {
         const userId = req.user._id;
-        const uploadResult = await cloudinary.uploader.upload(profilePic, {
-            folder: "chatnova/profile_pics",
-            public_id: `profile_${userId}`,
-            overwrite: true,
-            resource_type: "image",
-        });
+        const updateData = {};
+
+        if (profilePic) {
+            const uploadResult = await cloudinary.uploader.upload(profilePic, {
+                folder: "chatnova/profile_pics",
+                public_id: `profile_${userId}`,
+                overwrite: true,
+                resource_type: "image",
+            });
+            updateData.profilePic = uploadResult.secure_url;
+        }
+
+        if (emailNotifications !== undefined) {
+            updateData.emailNotifications = emailNotifications;
+        }
+
         const updatedUser = await User.findByIdAndUpdate(
             userId,
-            { profilePic: uploadResult.secure_url },
+            updateData,
             { new: true, select: "-password -__v" }
         );
         if (!updatedUser) return res.status(404).json({ message: "User not found" });
@@ -273,6 +285,7 @@ export const updateProfile = async (req, res) => {
             email: updatedUser.email,
             profilePic: updatedUser.profilePic,
             isVerified: updatedUser.isVerified,
+            emailNotifications: updatedUser.emailNotifications,
         });
     } catch (error) {
         console.error("Error in updateProfile:", error);

@@ -11,12 +11,35 @@
 import nodemailer from "nodemailer";
 import { ENV } from "./env.js";
 
-export const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-        user: ENV.GMAIL_USER,
-        pass: ENV.GMAIL_APP_PASSWORD, // Gmail App Password (not your real password)
-    },
-});
+let transportOptions;
 
-export const MAIL_FROM = `ChatNova <${ENV.GMAIL_USER}>`;
+if (ENV.SMTP_HOST) {
+    console.log(`[email] Configuring SMTP with host: ${ENV.SMTP_HOST}, port: ${ENV.SMTP_PORT}`);
+    transportOptions = {
+        host: ENV.SMTP_HOST,
+        port: parseInt(ENV.SMTP_PORT || "1025", 10),
+        secure: false, // TLS is handled differently for local dev SMTP
+    };
+    if (ENV.SMTP_USER || ENV.SMTP_PASS) {
+        transportOptions.auth = {
+            user: ENV.SMTP_USER,
+            pass: ENV.SMTP_PASS,
+        };
+    }
+} else {
+    console.log(`[email] Configuring standard Gmail SMTP service for user: ${ENV.GMAIL_USER}`);
+    transportOptions = {
+        service: "gmail",
+        auth: {
+            user: ENV.GMAIL_USER,
+            pass: ENV.GMAIL_APP_PASSWORD, // Gmail App Password (not your real password)
+        },
+    };
+}
+
+export const transporter = nodemailer.createTransport(transportOptions);
+
+export const MAIL_FROM = ENV.SMTP_HOST
+    ? `ChatNova <${ENV.EMAIL_FROM || "no-reply@chatnova.local"}>`
+    : `ChatNova <${ENV.GMAIL_USER}>`;
+

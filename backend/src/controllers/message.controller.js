@@ -9,6 +9,7 @@ import User from "../models/User.js";
 import cloudinary from "../lib/cloudinary.js";
 import { io, getReceiverSocketId } from "../lib/socket.js";
 import streamifier from "streamifier";
+import { sendMessageEmailIfNeeded } from "../lib/notificationHelper.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -106,6 +107,9 @@ export const sendMessage = async (req, res) => {
     if (receiverSocketId) io.to(receiverSocketId).emit("newMessage", newMessage);
     if (senderSocketId) io.to(senderSocketId).emit("newMessage", newMessage);
 
+    // Fire-and-forget: email notification for offline receiver
+    sendMessageEmailIfNeeded(receiverId, senderId, text || "📷 Image").catch(() => {});
+
     res.status(201).json(newMessage);
   } catch (error) {
     console.error("Error in sendMessage:", error.message);
@@ -195,6 +199,9 @@ export const sendAudioMessage = async (req, res) => {
 
     if (receiverSocketId) io.to(receiverSocketId).emit("newMessage", newMessage);
     if (senderSocketId) io.to(senderSocketId).emit("newMessage", newMessage);
+
+    // Fire-and-forget: email notification for offline receiver
+    sendMessageEmailIfNeeded(receiverId, senderId, "🎵 Audio message").catch(() => {});
 
     res.status(201).json(newMessage);
   } catch (error) {
