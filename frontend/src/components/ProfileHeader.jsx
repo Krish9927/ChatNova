@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { LogOutIcon, VolumeOffIcon, Volume2Icon } from "lucide-react";
+import { LogOutIcon, VolumeOffIcon, Volume2Icon, MailIcon, MailXIcon } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 
@@ -75,8 +75,29 @@ function ProfileHeader() {
           <button
             className="text-slate-400 hover:text-slate-200 transition-colors"
             onClick={logout}
+            title="Log Out"
           >
             <LogOutIcon className="w-5 h-5" />
+          </button>
+
+          {/* EMAIL NOTIFICATIONS TOGGLE BTN */}
+          <button
+            className="text-slate-400 hover:text-slate-200 transition-colors"
+            onClick={async () => {
+              if (isSoundEnabled) {
+                mouseClickSound.currentTime = 0;
+                mouseClickSound.play().catch((error) => console.log("Audio play failed:", error));
+              }
+              const currentVal = authUser?.emailNotifications !== false;
+              await updateProfile({ emailNotifications: !currentVal });
+            }}
+            title={authUser?.emailNotifications !== false ? "Email Notifications Enabled" : "Email Notifications Disabled"}
+          >
+            {authUser?.emailNotifications !== false ? (
+              <MailIcon className="w-5 h-5 text-emerald-500" />
+            ) : (
+              <MailXIcon className="w-5 h-5 text-slate-500" />
+            )}
           </button>
 
           {/* SOUND TOGGLE BTN */}
@@ -88,6 +109,7 @@ function ProfileHeader() {
               mouseClickSound.play().catch((error) => console.log("Audio play failed:", error));
               toggleSound();
             }}
+            title={isSoundEnabled ? "Sound Enabled" : "Sound Muted"}
           >
             {isSoundEnabled ? (
               <Volume2Icon className="w-5 h-5" />

@@ -1,6 +1,7 @@
 import FriendRequest from "../models/FriendRequest.js";
 import User from "../models/User.js";
 import { io, getReceiverSocketId } from "../lib/socket.js";
+import { sendFriendRequestEmailIfNeeded } from "../lib/notificationHelper.js";
 
 // ── Search users (exclude self + existing friends + pending) ─────────────────
 export const searchUsers = async (req, res) => {
@@ -131,6 +132,9 @@ export const sendRequest = async (req, res) => {
         if (receiverSocket) {
             io.to(receiverSocket).emit("friendRequest", populated);
         }
+
+        // Fire-and-forget: email notification for offline receiver
+        sendFriendRequestEmailIfNeeded(receiverId, senderId).catch(() => {});
 
         res.status(201).json(populated);
     } catch (err) {

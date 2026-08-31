@@ -169,7 +169,6 @@ ChatNova/
 │   ├── src/                          # React components, Zustand stores, custom hooks
 │   └── package.json
 ├── docker-compose.yml                # Multi-service container orchestration
-├── .env.example                      # Environment configuration template
 └── README.md                         # Project documentation
 ```
 

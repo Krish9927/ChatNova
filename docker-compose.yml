@@ -3,7 +3,7 @@
 # Run the entire stack with: docker compose up --build
 # Stop everything with: docker compose down
 
-version: '3.9'
+
 
 services:
 
@@ -93,14 +93,36 @@ services:
       # Disable SSL for local Postgres container (it doesn't support SSL)
       POSTGRES_SSL: "false"
 
+      # Use the deployed Render URL so email buttons link to the live app
+      # even when running the stack locally with Docker + Mailpit
+      APP_URL: https://chatnova-1-pad9.onrender.com
+
+      # SMTP: Points to the local Mailpit service for offline notifications
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+
     depends_on:
       # 'depends_on' with condition ensures app only starts AFTER
-      # postgres and redis pass their healthchecks
+      # postgres, redis, and mailpit are available
       # Without this, app container starts immediately, fails to connect, and crashes
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mailpit:
+        condition: service_started
+
+  # ─────────────────────────────────────────────
+  # SERVICE 4: Mailpit (Offline SMTP & Webmail Client)
+  # ─────────────────────────────────────────────
+  mailpit:
+    image: axllent/mailpit:v1.15
+    container_name: chatnova_mailpit
+    restart: unless-stopped
+    ports:
+      - "8025:8025"                    # Web UI (localhost:8025)
+      - "1025:1025"                    # SMTP port
+
 
 
 # ─────────────────────────────────────────────
