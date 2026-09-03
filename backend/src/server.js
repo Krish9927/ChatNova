@@ -6,6 +6,7 @@ import groupRoutes from './routes/group.route.js';
 import friendRoutes from './routes/friend.route.js';
 import roomRoutes from './routes/room.route.js';
 import translateRoutes from './routes/translate.route.js';
+import dashboardRoutes from './routes/dashboard.route.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { connectDB } from './lib/db.js';
@@ -32,6 +33,7 @@ app.use("/api/groups", groupRoutes);
 app.use("/api/friends", friendRoutes);
 app.use("/api/rooms", roomRoutes);
 app.use("/api/translate", translateRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 app.get("/test-client", (req, res) => {
     res.sendFile(path.join(path.resolve(), "public/test-client.html"));

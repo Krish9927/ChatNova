@@ -33,6 +33,12 @@ export const socketAuthMiddleware = async (socket, next) => {
     socket.user = user;
     socket.userId = user._id.toString();
 
+    // single-session enforcement — reject connections carrying a stale token
+    if (decoded.tokenVersion !== user.tokenVersion) {
+      console.log(`Socket connection rejected: stale tokenVersion for user ${user.username}`);
+      return next(new Error("Unauthorized - Session expired. Please log in again."));
+    }
+
     console.log(`Socket authenticated for user: ${user.username} (${user._id})`);
 
     next();

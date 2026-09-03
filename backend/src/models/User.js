@@ -17,6 +17,9 @@ const userSchema = new mongoose.Schema({
 
     // email notification preference (opt-out)
     emailNotifications: { type: Boolean, default: true },
+
+    // single-session enforcement — incremented on every new login, invalidates all prior JWTs
+    tokenVersion: { type: Number, default: 0 },
 }, { timestamps: true });
 
 const User = mongoose.model("User", userSchema);
