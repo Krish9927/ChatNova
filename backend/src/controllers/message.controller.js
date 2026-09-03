@@ -48,6 +48,17 @@ export const getMessagesByUserId = async (req, res) => {
     const myId = req.user._id.toString();
     const otherId = req.params.id;
 
+    // Guard: the target user must still exist in MongoDB.
+    // If the account was deleted and re-created, its old _id is stale —
+    // return 404 so the frontend can clean up and show a clear message.
+    const otherUserExists = await User.exists({ _id: otherId });
+    if (!otherUserExists) {
+      return res.status(404).json({
+        message: "This user no longer exists. They may have re-registered with a new account.",
+        code: "USER_NOT_FOUND",
+      });
+    }
+
     const { rows } = await pool.query(
       `SELECT * FROM dm_messages
        WHERE (sender_id = $1 AND receiver_id = $2)
@@ -108,7 +119,7 @@ export const sendMessage = async (req, res) => {
     if (senderSocketId) io.to(senderSocketId).emit("newMessage", newMessage);
 
     // Fire-and-forget: email notification for offline receiver
-    sendMessageEmailIfNeeded(receiverId, senderId, text || "📷 Image").catch(() => {});
+    sendMessageEmailIfNeeded(receiverId, senderId, text || "📷 Image").catch(() => { });
 
     res.status(201).json(newMessage);
   } catch (error) {
@@ -201,7 +212,7 @@ export const sendAudioMessage = async (req, res) => {
     if (senderSocketId) io.to(senderSocketId).emit("newMessage", newMessage);
 
     // Fire-and-forget: email notification for offline receiver
-    sendMessageEmailIfNeeded(receiverId, senderId, "🎵 Audio message").catch(() => {});
+    sendMessageEmailIfNeeded(receiverId, senderId, "🎵 Audio message").catch(() => { });
 
     res.status(201).json(newMessage);
   } catch (error) {

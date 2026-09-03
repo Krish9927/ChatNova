@@ -27,7 +27,7 @@ export const searchUsers = async (req, res) => {
         });
         const pendingIds = pending.flatMap((r) => [r.sender, r.receiver]);
 
-        const excludeIds = [...new Set([myId, ...friendIds, ...pendingIds].map(String))];
+        const excludeIds = [...new Set([myId, ...friendIds, ...pendingIds])];
 
         const users = await User.find({
             _id: { $nin: excludeIds },
@@ -42,7 +42,7 @@ export const searchUsers = async (req, res) => {
 
         res.status(200).json(users);
     } catch (err) {
-        console.error("searchUsers:", err.message);
+        console.error("searchUsers error:", err);
         res.status(500).json({ message: "Internal server error" });
     }
 };
@@ -58,11 +58,32 @@ export const getFriends = async (req, res) => {
             .populate("sender", "username profilePic")
             .populate("receiver", "username profilePic");
 
-        const friends = requests.map((r) =>
-            r.sender._id.toString() === myId.toString() ? r.receiver : r.sender
-        );
-        res.status(200).json(friends);
+        // Filter out requests where the other side's user was deleted
+        // (populate returns null when the referenced document no longer exists).
+        // Also auto-delete those stale FriendRequest documents so they never appear again.
+        const valid = [];
+        const staleIds = [];
+
+        for (const r of requests) {
+            const other = r.sender._id.toString() === myId.toString() ? r.receiver : r.sender;
+            if (!other || !other._id) {
+                // The other user's document is gone — mark for cleanup
+                staleIds.push(r._id);
+            } else {
+                valid.push(other);
+            }
+        }
+
+        // Fire-and-forget cleanup of orphaned FriendRequest rows
+        if (staleIds.length > 0) {
+            FriendRequest.deleteMany({ _id: { $in: staleIds } }).catch((err) =>
+                console.error("getFriends: failed to delete stale requests", err.message)
+            );
+        }
+
+        res.status(200).json(valid);
     } catch (err) {
+        console.error("getFriends error:", err.message);
         res.status(500).json({ message: "Internal server error" });
     }
 };
@@ -134,7 +155,7 @@ export const sendRequest = async (req, res) => {
         }
 
         // Fire-and-forget: email notification for offline receiver
-        sendFriendRequestEmailIfNeeded(receiverId, senderId).catch(() => {});
+        sendFriendRequestEmailIfNeeded(receiverId, senderId).catch(() => { });
 
         res.status(201).json(populated);
     } catch (err) {

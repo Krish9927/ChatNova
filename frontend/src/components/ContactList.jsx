@@ -8,7 +8,7 @@ import { Search, UserPlus, Check, X, Clock, Users } from "lucide-react";
 function ContactList() {
   const {
     friends, pendingRequests, sentRequests, searchResults, isSearching,
-    fetchFriends, fetchPending, fetchSent, searchUsers, clearSearch,
+    fetchDashboard, fetchAllParallel, searchUsers, clearSearch,
     sendRequest, acceptRequest, rejectRequest,
   } = useFriendStore();
   const { setSelectedUser } = useChatStore();
@@ -19,10 +19,10 @@ function ContactList() {
   const [query, setQuery] = useState("");
 
   useEffect(() => {
-    fetchFriends();
-    fetchPending();
-    fetchSent();
-  }, []);
+    // Try Solution 1 first (Dashboard API)
+    // If it fails (404), it will automatically fall back to parallel calls
+    fetchDashboard();
+  }, [fetchDashboard]);
 
   // debounce search
   useEffect(() => {

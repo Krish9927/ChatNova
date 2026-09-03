@@ -3,6 +3,42 @@ import { axiosInstance } from "../lib/axios";
 import toast from "react-hot-toast";
 import { useAuthStore } from "./useAuthStore";
 
+// ── Cache Configuration ───────────────────────────────────────────────────────
+const CACHE_KEY = "chatNova_groups";
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// ── Cache Helpers ─────────────────────────────────────────────────────────────
+const getCachedData = () => {
+    try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (!cached) return null;
+
+        const { data, timestamp } = JSON.parse(cached);
+        const isExpired = Date.now() - timestamp > CACHE_DURATION;
+
+        if (isExpired) {
+            localStorage.removeItem(CACHE_KEY);
+            return null;
+        }
+
+        return data;
+    } catch (err) {
+        console.error("Cache read error:", err);
+        return null;
+    }
+};
+
+const setCachedData = (data) => {
+    try {
+        localStorage.setItem(
+            CACHE_KEY,
+            JSON.stringify({ data, timestamp: Date.now() })
+        );
+    } catch (err) {
+        console.error("Cache write error:", err);
+    }
+};
+
 export const useGroupStore = create((set, get) => ({
     groups: [],
     selectedGroup: null,
@@ -34,12 +70,22 @@ export const useGroupStore = create((set, get) => ({
 
     // ── Fetch all my groups ───────────────────────────────────────────────────
     fetchGroups: async () => {
+        const cachedData = getCachedData();
+
+        // Load from cache immediately
+        if (cachedData) {
+            set({ groups: cachedData });
+        }
+
         set({ isGroupsLoading: true });
         try {
             const res = await axiosInstance.get("/groups");
             set({ groups: res.data });
+            setCachedData(res.data);
         } catch (err) {
-            toast.error(err.response?.data?.message || "Could not load groups");
+            if (!cachedData) {
+                toast.error(err.response?.data?.message || "Could not load groups");
+            }
         } finally {
             set({ isGroupsLoading: false });
         }
@@ -51,6 +97,9 @@ export const useGroupStore = create((set, get) => ({
             const res = await axiosInstance.post("/groups", { name, description, memberIds });
             set((s) => ({ groups: [res.data, ...s.groups] }));
             toast.success(`Group "${res.data.name}" created`);
+
+            // Invalidate cache
+            localStorage.removeItem(CACHE_KEY);
             return res.data;
         } catch (err) {
             toast.error(err.response?.data?.message || "Could not create group");
@@ -66,6 +115,7 @@ export const useGroupStore = create((set, get) => ({
                 selectedGroup: s.selectedGroup?._id === groupId ? res.data : s.selectedGroup,
             }));
             toast.success("Group updated");
+            localStorage.removeItem(CACHE_KEY);
         } catch (err) {
             toast.error(err.response?.data?.message || "Could not update group");
         }
@@ -80,6 +130,7 @@ export const useGroupStore = create((set, get) => ({
                 selectedGroup: s.selectedGroup?._id === groupId ? res.data : s.selectedGroup,
             }));
             toast.success("Members added");
+            localStorage.removeItem(CACHE_KEY);
         } catch (err) {
             toast.error(err.response?.data?.message || "Could not add members");
         }
@@ -95,6 +146,7 @@ export const useGroupStore = create((set, get) => ({
                 groups: s.groups.map((g) => g._id === groupId ? res.data : g),
                 selectedGroup: s.selectedGroup?._id === groupId ? res.data : s.selectedGroup,
             }));
+            localStorage.removeItem(CACHE_KEY);
         } catch (err) {
             toast.error(err.response?.data?.message || "Could not remove member");
         }
@@ -109,6 +161,7 @@ export const useGroupStore = create((set, get) => ({
                 selectedGroup: s.selectedGroup?._id === groupId ? null : s.selectedGroup,
             }));
             toast.success("Group deleted");
+            localStorage.removeItem(CACHE_KEY);
         } catch (err) {
             toast.error(err.response?.data?.message || "Could not delete group");
         }
@@ -220,6 +273,7 @@ export const useGroupStore = create((set, get) => ({
                 if (s.groups.some((g) => g._id === group._id)) return {};
                 return { groups: [group, ...s.groups] };
             });
+            localStorage.removeItem(CACHE_KEY);
             const authUser = useAuthStore.getState().authUser;
             if (group.admin._id !== authUser?._id) {
                 toast(`Added to group: ${group.name}`, { icon: "👥" });
@@ -231,6 +285,7 @@ export const useGroupStore = create((set, get) => ({
                 groups: s.groups.map((g) => g._id === group._id ? group : g),
                 selectedGroup: s.selectedGroup?._id === group._id ? group : s.selectedGroup,
             }));
+            localStorage.removeItem(CACHE_KEY);
         });
 
         socket.on("groupDeleted", ({ groupId }) => {
@@ -238,6 +293,7 @@ export const useGroupStore = create((set, get) => ({
                 groups: s.groups.filter((g) => g._id !== groupId),
                 selectedGroup: s.selectedGroup?._id === groupId ? null : s.selectedGroup,
             }));
+            localStorage.removeItem(CACHE_KEY);
             toast("A group was deleted", { icon: "🗑️" });
         });
 
@@ -246,6 +302,7 @@ export const useGroupStore = create((set, get) => ({
                 groups: s.groups.filter((g) => g._id !== groupId),
                 selectedGroup: s.selectedGroup?._id === groupId ? null : s.selectedGroup,
             }));
+            localStorage.removeItem(CACHE_KEY);
             toast("You were removed from a group", { icon: "👋" });
         });
     },
@@ -258,5 +315,9 @@ export const useGroupStore = create((set, get) => ({
         socket.off("groupUpdated");
         socket.off("groupDeleted");
         socket.off("removedFromGroup");
+    },
+
+    clearCache: () => {
+        localStorage.removeItem(CACHE_KEY);
     },
 }));

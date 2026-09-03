@@ -98,11 +98,13 @@ export const useAuthStore = create((set, get) => ({
   logout: async () => {
     try {
       await axiosInstance.post("/auth/logout");
-      set({ authUser: null });
       toast.success("Logged out successfully");
-      get().disconnectSocket();
     } catch {
       toast.error("Error logging out");
+    } finally {
+      // always clear local state and socket regardless of server response
+      get().disconnectSocket();
+      set({ authUser: null });
     }
   },
 
@@ -171,6 +173,16 @@ export const useAuthStore = create((set, get) => ({
     socket.on("connect", () => console.log("Socket connected", socket.id));
     socket.on("getOnlineUsers", (userIds) => set({ onlineUsers: userIds }));
     socket.on("connect_error", (err) => console.warn("Socket connect_error:", err.message));
+
+    // single-session enforcement — server kicks this session when the account logs in elsewhere
+    socket.on("force_logout", ({ reason } = {}) => {
+      // Clean up locally — no server call needed, the server already invalidated our session.
+      // Remove all listeners first so disconnectSocket() doesn't try to re-trigger anything.
+      socket.removeAllListeners();
+      socket.disconnect();
+      set({ socket: null, onlineUsers: [], authUser: null });
+      toast.error(reason || "Your account signed in from another device. You have been logged out.");
+    });
   },
 
   disconnectSocket: () => {

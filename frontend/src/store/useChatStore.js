@@ -5,11 +5,49 @@
  *  - Fixed broken optimistic update: set() call was accidentally on same line as comment
  *  - subscribeToMessages: added null guard for socket
  *  - subscribeToMessages: reads isSoundEnabled via get() instead of stale closure
+ *  - Added caching support for chat partners
+ *  - Added parallel loading capability
  */
 import { create } from "zustand";
 import { axiosInstance } from "../lib/axios";
 import toast from "react-hot-toast";
 import { useAuthStore } from "./useAuthStore";
+
+// ── Cache Configuration ───────────────────────────────────────────────────────
+const CACHE_KEY = "chatNova_chatPartners";
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// ── Cache Helpers ─────────────────────────────────────────────────────────────
+const getCachedData = () => {
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (!cached) return null;
+
+    const { data, timestamp } = JSON.parse(cached);
+    const isExpired = Date.now() - timestamp > CACHE_DURATION;
+
+    if (isExpired) {
+      localStorage.removeItem(CACHE_KEY);
+      return null;
+    }
+
+    return data;
+  } catch (err) {
+    console.error("Cache read error:", err);
+    return null;
+  }
+};
+
+const setCachedData = (data) => {
+  try {
+    localStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({ data, timestamp: Date.now() })
+    );
+  } catch (err) {
+    console.error("Cache write error:", err);
+  }
+};
 
 export const useChatStore = create((set, get) => ({
   allContacts: [],
@@ -67,18 +105,30 @@ export const useChatStore = create((set, get) => ({
       set({ isUsersLoading: false });
     }
   },
+
   getMyChatPartners: async () => {
+    const cachedData = getCachedData();
+
+    // Load from cache immediately
+    if (cachedData) {
+      set({ chats: cachedData });
+    }
+
     set({ isUsersLoading: true });
     try {
       const res = await axiosInstance.get("/messages/chat");
       set({ chats: res.data });
+      setCachedData(res.data);
     } catch (error) {
       const msg = error?.response?.data?.message || error?.message || "Could not load chats";
-      toast.error(msg);
+      if (!cachedData) {
+        toast.error(msg);
+      }
     } finally {
       set({ isUsersLoading: false });
     }
   },
+
   getMessagesByUserId: async (userId) => {
     if (!userId) return;
     set({ isMessagesLoading: true });
@@ -86,12 +136,24 @@ export const useChatStore = create((set, get) => ({
       const res = await axiosInstance.get(`/messages/${userId}`);
       set({ messages: res.data });
     } catch (error) {
-      const msg = error?.response?.data?.message || error?.message || "Could not load messages";
-      toast.error(msg);
+      if (error.response?.status === 404) {
+        // The user no longer exists (deleted + re-registered with new _id).
+        // Close the chat panel and remove the stale contact from the friends list.
+        set({ selectedUser: null, messages: [] });
+        // Lazily import to avoid circular dependency
+        import("./useFriendStore").then(({ useFriendStore }) => {
+          useFriendStore.getState().removeFriendById(userId);
+        });
+        toast.error("This contact no longer exists and has been removed.");
+      } else {
+        const msg = error?.response?.data?.message || error?.message || "Could not load messages";
+        toast.error(msg);
+      }
     } finally {
       set({ isMessagesLoading: false });
     }
   },
+
   sendMessage: async (messageData) => {
     const { selectedUser } = get();
     const authUser = useAuthStore.getState().authUser;
@@ -123,12 +185,16 @@ export const useChatStore = create((set, get) => ({
       set((state) => ({
         messages: state.messages.map((m) => (m._id === tempId ? res.data : m)),
       }));
+
+      // Invalidate cache when new message sent
+      localStorage.removeItem(CACHE_KEY);
     } catch (error) {
       // remove optimistic message on failure
       set((state) => ({ messages: state.messages.filter((m) => m._id !== tempId) }));
       toast.error(error.response?.data?.message || "Something went wrong");
     }
   },
+
   subscribeToMessages: () => {
     const socket = useAuthStore.getState().socket;
     if (!socket) return;
@@ -151,6 +217,9 @@ export const useChatStore = create((set, get) => ({
         }));
       }
 
+      // Invalidate cache when new message received
+      localStorage.removeItem(CACHE_KEY);
+
       if (get().isSoundEnabled) {
         const notificationSound = new Audio("/sounds/notification.mp3");
         notificationSound.currentTime = 0;
@@ -158,6 +227,7 @@ export const useChatStore = create((set, get) => ({
       }
     });
   },
+
   // Emit typing start/stop to the currently selected user
   emitTypingStart: () => {
     const socket = useAuthStore.getState().socket;
@@ -206,5 +276,9 @@ export const useChatStore = create((set, get) => ({
     const socket = useAuthStore.getState().socket;
     if (!socket) return;
     socket.off("newMessage");
+  },
+
+  clearCache: () => {
+    localStorage.removeItem(CACHE_KEY);
   },
 }));

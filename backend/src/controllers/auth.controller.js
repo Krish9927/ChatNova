@@ -16,6 +16,8 @@ import { generateToken } from "../lib/utils.js";
 import { sendWelcomeEmail, sendOtpEmail } from "../emails/emailHandler.js";
 import { ENV } from "../lib/env.js";
 import cloudinary from "../lib/cloudinary.js";
+import { io } from "../lib/socket.js";
+import { redisClient } from "../lib/redis.js";
 
 // generate a 6-digit OTP
 const generateOtp = () => String(Math.floor(100000 + Math.random() * 900000));
@@ -87,9 +89,21 @@ export const verifyEmailOtp = async (req, res) => {
         user.isVerified = true;
         user.verifyOtp = undefined;
         user.verifyOtpExpiry = undefined;
+        // invalidate any existing session
+        user.tokenVersion = (user.tokenVersion ?? 0) + 1;
         await user.save();
 
-        generateToken(user._id, res);
+        // kick the old socket connection if one exists
+        try {
+            const oldSocketId = await redisClient.get(`user:online:${user._id}`);
+            if (oldSocketId) {
+                io.to(oldSocketId).emit("force_logout", { reason: "Logged in from another device" });
+            }
+        } catch (e) {
+            console.error("[single-session] Could not kick old socket on verifyEmailOtp:", e);
+        }
+
+        generateToken(user._id, res, user.tokenVersion);
         sendWelcomeEmail(user.email, user.username).catch(console.error);
 
         res.status(200).json({
@@ -230,7 +244,21 @@ export const login = async (req, res) => {
             });
         }
 
-        generateToken(user._id, res);
+        // increment tokenVersion to invalidate all prior JWTs
+        user.tokenVersion = (user.tokenVersion ?? 0) + 1;
+        await user.save();
+
+        // kick the old socket connection if one exists
+        try {
+            const oldSocketId = await redisClient.get(`user:online:${user._id}`);
+            if (oldSocketId) {
+                io.to(oldSocketId).emit("force_logout", { reason: "Logged in from another device" });
+            }
+        } catch (e) {
+            console.error("[single-session] Could not kick old socket on login:", e);
+        }
+
+        generateToken(user._id, res, user.tokenVersion);
         res.status(200).json({
             _id: user._id,
             fullName: user.username,

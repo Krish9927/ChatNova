@@ -31,6 +31,9 @@ function ChatContainer() {
 
   useEffect(() => {
     if (!selectedUser) return;
+    // When the message load results in a 404 (ghost contact), the store will
+    // call removeFriendById + toast, then the selectedUser will be cleared
+    // by the parent once friends list updates. Nothing extra needed here.
     getMessagesByUserId(selectedUser._id);
     subscribeToMessages();
     subscribeToTyping();
